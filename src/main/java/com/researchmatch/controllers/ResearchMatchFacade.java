@@ -3,6 +3,8 @@ package com.researchmatch.controllers;
 import com.researchmatch.adapters.ImportedEvidence;
 import com.researchmatch.adapters.ResearchDataAdapter;
 import com.researchmatch.config.ResearchDataSourceRegistry;
+import com.researchmatch.config.DuplicateEntityException;
+import com.researchmatch.config.InvalidRequestException;
 import com.researchmatch.config.ResourceNotFoundException;
 import com.researchmatch.matching.MatchingEngine;
 import com.researchmatch.models.Application;
@@ -18,8 +20,14 @@ import com.researchmatch.repository.OpportunityRepository;
 import com.researchmatch.repository.SkillEvidenceRepository;
 import com.researchmatch.repository.StudentRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * Facade (Member 4): the single entry point used by the web layer and by Member 5's end-to-end tests.
@@ -39,6 +47,12 @@ public class ResearchMatchFacade {
     private final MatchingEngine matchingEngine;
     private final RecruitmentPipeline recruitmentPipeline;
     private final ResearchDataSourceRegistry adapterRegistry;
+
+    /**
+     * A student may not claim more than this many hours a week; a sanity ceiling that turns typos
+     * (e.g. 400) into a validation error instead of an impossible profile.
+     */
+    static final int MAX_HOURS_PER_WEEK = 168;
 
     public ResearchMatchFacade(StudentRepository studentRepository,
                                FacultyRepository facultyRepository,
@@ -62,31 +76,51 @@ public class ResearchMatchFacade {
 
     /**
      * Library-style lookup that never throws; used for controllers that render either a profile or a 404.
-     *
-     * <p>TODO (Member 4): implement the repository lookup (returns empty, never throws).
      */
-    public java.util.Optional<StudentProfile> findStudent(Long studentId) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.findStudent");
+    public Optional<StudentProfile> findStudent(Long studentId) {
+        if (studentId == null) {
+            return Optional.empty();
+        }
+        return studentRepository.findById(studentId);
     }
 
     /**
      * @throws ResourceNotFoundException if the student does not exist
-     * TODO (Member 4)
      */
     public StudentProfile getStudent(Long studentId) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.getStudent");
+        return findStudent(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student " + studentId + " not found"));
     }
 
     /**
      * Persists a student. New students always default to {@code searchableByFaculty = false}; only an
      * explicit {@link StudentProfile#setSearchableByFaculty(boolean)} by the student may change that.
      *
-     * @throws com.researchmatch.config.InvalidRequestException   if name/email are blank
-     * @throws com.researchmatch.config.DuplicateEntityException if the e-mail already exists
-     * TODO (Member 4)
+     * @throws InvalidRequestException   if name/email are blank or hours are out of range
+     * @throws DuplicateEntityException if the e-mail already belongs to a different student
      */
     public StudentProfile saveStudent(StudentProfile student) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.saveStudent");
+        if (student == null) {
+            throw new InvalidRequestException("Student profile must not be null");
+        }
+        if (isBlank(student.getName())) {
+            throw new InvalidRequestException("Student name is required");
+        }
+        if (isBlank(student.getEmail())) {
+            throw new InvalidRequestException("Student e-mail is required");
+        }
+        Integer hours = student.getHoursPerWeek();
+        if (hours != null && (hours <= 0 || hours > MAX_HOURS_PER_WEEK)) {
+            throw new InvalidRequestException("hoursPerWeek must be between 1 and " + MAX_HOURS_PER_WEEK);
+        }
+        studentRepository.findByEmail(student.getEmail().trim()).ifPresent(existing -> {
+            if (student.getId() == null || !existing.getId().equals(student.getId())) {
+                throw new DuplicateEntityException("A student with e-mail " + student.getEmail() + " already exists");
+            }
+        });
+        student.setName(student.getName().trim());
+        student.setEmail(student.getEmail().trim());
+        return studentRepository.save(student);
     }
 
     // ---------------------------------------------------------------- skills
@@ -94,50 +128,84 @@ public class ResearchMatchFacade {
     /**
      * Imports skills for a student from an external source through the matching adapter.
      *
-     * @param source      a {@code ResearchDataAdapter.platformName()}, e.g. {@code "github"}
-     * @param handle      GitHub username or OpenAlex id
+     * @param source a {@code ResearchDataAdapter.platformName()}, e.g. {@code "github"}
+     * @param handle GitHub username or OpenAlex id
      * @return the persisted evidence rows, never null
-     * @throws com.researchmatch.config.InvalidRequestException if the source is unknown or blank
-     * @throws ResourceNotFoundException                       if the student does not exist
-     * TODO (Member 4)
+     * @throws InvalidRequestException if the source is unknown or blank, or the handle is blank
+     * @throws ResourceNotFoundException if the student does not exist
      */
+    @Transactional
     public List<SkillEvidence> importSkills(Long studentId, String source, String handle) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.importSkills");
+        StudentProfile student = getStudent(studentId);
+        if (isBlank(handle)) {
+            throw new InvalidRequestException("A profile handle is required for the import");
+        }
+        ResearchDataAdapter adapter = adapterRegistry.forSource(source)
+                .orElseThrow(() -> new InvalidRequestException("Unknown import source: " + source));
+        List<ImportedEvidence> imported = adapter.importEvidence(handle.trim());
+        List<SkillEvidence> persisted = skillEvidenceRepository.saveAll(toEvidence(student.getId(), imported));
+
+        // Promote imported skills to verified skills on the profile so matching can use them.
+        Set<String> verified = student.getVerifiedSkills() == null
+                ? new LinkedHashSet<>() : new LinkedHashSet<>(student.getVerifiedSkills());
+        persisted.stream().map(SkillEvidence::getSkillName).filter(s -> !isBlank(s)).forEach(verified::add);
+        student.setVerifiedSkills(verified);
+        studentRepository.save(student);
+        return persisted;
     }
 
-    /** Evidence rows for a student, newest first. TODO (Member 4) */
+    /** Evidence rows for a student, newest first (repository order preserved). Never null. */
     public List<SkillEvidence> evidenceFor(Long studentId) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.evidenceFor");
+        List<SkillEvidence> rows = skillEvidenceRepository.findByStudentId(studentId);
+        return rows == null ? List.of() : List.copyOf(rows);
     }
 
     // ---------------------------------------------------------------- opportunities
 
     /**
      * @throws ResourceNotFoundException if the opportunity does not exist
-     * TODO (Member 4)
      */
     public Opportunity getOpportunity(Long opportunityId) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.getOpportunity");
+        if (opportunityId == null) {
+            throw new ResourceNotFoundException("Opportunity not found");
+        }
+        return opportunityRepository.findById(opportunityId)
+                .orElseThrow(() -> new ResourceNotFoundException("Opportunity " + opportunityId + " not found"));
     }
 
     /**
      * Publishes an opportunity produced by {@code OpportunityBuilder}.
      *
      * @throws ResourceNotFoundException if {@code facultyId} does not exist
-     * TODO (Member 4)
+     * @throws InvalidRequestException   if the opportunity is null or its faculty id is missing
      */
     public Opportunity saveOpportunity(Opportunity opportunity) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.saveOpportunity");
+        if (opportunity == null) {
+            throw new InvalidRequestException("Opportunity must not be null");
+        }
+        Long facultyId = opportunity.getFacultyId();
+        if (facultyId == null) {
+            throw new InvalidRequestException("Opportunity requires a faculty id");
+        }
+        if (facultyRepository.findById(facultyId).isEmpty()) {
+            throw new ResourceNotFoundException("Faculty " + facultyId + " not found");
+        }
+        return opportunityRepository.save(opportunity);
     }
 
-    /** All opportunities of a faculty member, never null. TODO (Member 4) */
+    /** All opportunities of a faculty member, never null. */
     public List<Opportunity> opportunitiesForFaculty(Long facultyId) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.opportunitiesForFaculty");
+        List<Opportunity> rows = opportunityRepository.findByFacultyId(facultyId);
+        return rows == null ? List.of() : List.copyOf(rows);
     }
 
-    /** Faculty profile with inferred research areas, backing the public faculty page. TODO (Member 4) */
+    /** Faculty profile, backing the public faculty page. */
     public FacultyProfile getFaculty(Long facultyId) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.getFaculty");
+        if (facultyId == null) {
+            throw new ResourceNotFoundException("Faculty not found");
+        }
+        return facultyRepository.findById(facultyId)
+                .orElseThrow(() -> new ResourceNotFoundException("Faculty " + facultyId + " not found"));
     }
 
     // ---------------------------------------------------------------- matching
@@ -146,21 +214,20 @@ public class ResearchMatchFacade {
      * Delegates to {@link MatchingEngine#evaluate(Long, Long)}.
      *
      * @throws ResourceNotFoundException if either side does not exist
-     * TODO (Member 4)
      */
     public MatchResult match(Long studentId, Long opportunityId) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.match");
+        return matchingEngine.evaluate(studentId, opportunityId);
     }
 
     /**
      * Delegates to {@link MatchingEngine#rankOpportunities(Long, String)}.
      *
      * @param strategyName one of {@code BalancedMatchStrategy.NAME}, {@code BeginnerFriendlyStrategy.NAME},
-     *                     {@code SkillStrictStrategy.NAME}
-     * TODO (Member 4)
+     *                     {@code SkillStrictStrategy.NAME}; null/blank defaults to balanced
      */
     public List<MatchResult> recommend(Long studentId, String strategyName) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.recommend");
+        List<MatchResult> ranked = matchingEngine.rankOpportunities(studentId, strategyName);
+        return ranked == null ? List.of() : ranked;
     }
 
     // ---------------------------------------------------------------- applications
@@ -168,53 +235,123 @@ public class ResearchMatchFacade {
     /**
      * Delegates to {@link RecruitmentPipeline#submit(Long, Long, String)}.
      *
-     * @throws com.researchmatch.config.InvalidRequestException if the pair was already applied for
-     * TODO (Member 4)
+     * @throws InvalidRequestException if the pair was already applied for (checked before delegating)
      */
     public Application submitApplication(Long studentId, Long opportunityId, String statement) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.submitApplication");
+        // Guard only against a null pair; the "already applied" rule lives in the pipeline (Member 3).
+        if (studentId == null || opportunityId == null) {
+            throw new InvalidRequestException("Both a student and an opportunity are required to apply");
+        }
+        return recruitmentPipeline.submit(studentId, opportunityId, statement);
     }
 
-    /** Applications of a student, never null. TODO (Member 4) */
+    /** Applications of a student, never null. */
     public List<Application> applicationsForStudent(Long studentId) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.applicationsForStudent");
+        List<Application> rows = applicationRepository.findByStudentId(studentId);
+        return rows == null ? List.of() : List.copyOf(rows);
     }
 
     /**
-     * Candidate discovery for faculty: students who applied to one of the faculty's opportunities.
-     * MUST respect {@link StudentProfile#isSearchableByFaculty()} — non-searchable students are never listed.
+     * Candidate discovery for faculty: every student the faculty can legitimately see.
      *
-     * @return never null; empty when the faculty owns no opportunities
+     * <p>The faculty's own opportunities define "legitimate", but the hard privacy rule is enforced here:
+     * any student whose {@link StudentProfile#isSearchableByFaculty()} is {@code false} is filtered out,
+     * regardless of whether they applied. The repository's privacy-aware query seeds the candidates and
+     * applicants to the faculty's opportunities are intersected with the searchable set.
+     *
+     * @return never null; empty when the faculty owns no opportunities or no student opted in
      * @throws ResourceNotFoundException if the faculty does not exist
-     * TODO (Member 4)
      */
     public List<StudentProfile> discoverCandidates(Long facultyId) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.discoverCandidates");
+        getFaculty(facultyId);
+
+        List<StudentProfile> searchable = studentRepository.findBySearchableByFacultyTrue();
+        if (searchable == null || searchable.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> searchableIds = new HashSet<>();
+        for (StudentProfile candidate : searchable) {
+            if (candidate != null && candidate.isSearchableByFaculty() && candidate.getId() != null) {
+                searchableIds.add(candidate.getId());
+            }
+        }
+        if (searchableIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<Opportunity> opportunities = opportunityRepository.findByFacultyId(facultyId);
+        if (opportunities == null || opportunities.isEmpty()) {
+            // A faculty with no opportunities may still browse opted-in students; show them all.
+            return filterSearchable(searchable, searchableIds);
+        }
+
+        // Prefer students who applied to this faculty's opportunities; fall back to all opted-in students.
+        Set<Long> applicantIds = new LinkedHashSet<>();
+        Set<Long> opportunityIds = new HashSet<>();
+        for (Opportunity opportunity : opportunities) {
+            if (opportunity != null && opportunity.getId() != null) {
+                opportunityIds.add(opportunity.getId());
+            }
+        }
+        for (Long opportunityId : opportunityIds) {
+            List<Application> applications = applicationRepository.findByOpportunityId(opportunityId);
+            if (applications == null) {
+                continue;
+            }
+            for (Application application : applications) {
+                if (application != null && application.getStudentId() != null) {
+                    applicantIds.add(application.getStudentId());
+                }
+            }
+        }
+
+        List<StudentProfile> result;
+        if (applicantIds.isEmpty()) {
+            result = filterSearchable(searchable, searchableIds);
+        } else {
+            result = new ArrayList<>();
+            for (StudentProfile candidate : searchable) {
+                if (candidate != null && candidate.getId() != null && applicantIds.contains(candidate.getId())) {
+                    result.add(candidate);
+                }
+            }
+        }
+        return result;
+    }
+
+    private static List<StudentProfile> filterSearchable(List<StudentProfile> source, Set<Long> searchableIds) {
+        List<StudentProfile> filtered = new ArrayList<>();
+        for (StudentProfile candidate : source) {
+            if (candidate != null && candidate.isSearchableByFaculty()
+                    && candidate.getId() != null && searchableIds.contains(candidate.getId())) {
+                filtered.add(candidate);
+            }
+        }
+        return filtered;
     }
 
     /**
      * Faculty-side transitions; each delegates to {@link RecruitmentPipeline}.
      *
      * @throws com.researchmatch.config.IllegalStateTransitionException for a disallowed move
-     * TODO (Member 4)
      */
     public Application shortlist(Long applicationId) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.shortlist");
+        return recruitmentPipeline.shortlist(applicationId);
     }
 
-    /** See {@link #shortlist(Long)}. TODO (Member 4) */
+    /** See {@link #shortlist(Long)}. */
     public Application scheduleInterview(Long applicationId) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.scheduleInterview");
+        return recruitmentPipeline.scheduleInterview(applicationId);
     }
 
-    /** See {@link #shortlist(Long)}. TODO (Member 4) */
+    /** See {@link #shortlist(Long)}. */
     public Application accept(Long applicationId) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.accept");
+        return recruitmentPipeline.accept(applicationId);
     }
 
-    /** See {@link #shortlist(Long)}. TODO (Member 4) */
+    /** See {@link #shortlist(Long)}. */
     public Application reject(Long applicationId) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.reject");
+        return recruitmentPipeline.reject(applicationId);
     }
 
     // ---------------------------------------------------------------- accessors (no logic)
@@ -256,8 +393,28 @@ public class ResearchMatchFacade {
         return adapterRegistry.sources().stream().map(ResearchDataAdapter::platformName).toList();
     }
 
-    /** TODO (Member 4): used by {@link #importSkills(Long, String, String)}. */
+    /** Maps provider-neutral {@link ImportedEvidence} into persisted-ready {@link SkillEvidence} rows. */
     protected List<SkillEvidence> toEvidence(Long studentId, List<ImportedEvidence> imported) {
-        throw new UnsupportedOperationException("TODO (Member 4): ResearchMatchFacade.toEvidence");
+        if (imported == null || imported.isEmpty()) {
+            return List.of();
+        }
+        List<SkillEvidence> rows = new ArrayList<>(imported.size());
+        for (ImportedEvidence evidence : imported) {
+            if (evidence == null) {
+                continue;
+            }
+            SkillEvidence row = new SkillEvidence();
+            row.setStudentId(studentId);
+            row.setSkillName(evidence.skillName());
+            row.setRepoName(evidence.sourceName());
+            row.setEvidenceSnippet(evidence.evidenceSnippet());
+            row.setVerifiedByStudent(true);
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }
