@@ -3,7 +3,8 @@
 **CS3383 AI for Software Engineering — group project.**
 
 These rules are **binding for every future OpenCode session** (and any AI or human contributor).
-Read this file fully before changing anything. If a task conflicts with this file, stop and ask.
+Read this file fully, plus [`docs/integration-contracts.md`](docs/integration-contracts.md), before changing
+anything. If a task conflicts with these files, stop and ask.
 
 ---
 
@@ -11,127 +12,108 @@ Read this file fully before changing anything. If a task conflicts with this fil
 
 | Concern | Choice |
 | --- | --- |
-| Language | **Java 17** (source/target 17 — do not use preview features or newer APIs) |
+| Language | **Java 17** (source/target 17 — no preview features, no newer APIs) |
 | Framework | **Spring Boot 3.x** |
-| Web / UI | `spring-boot-starter-web` + `spring-boot-starter-thymeleaf` |
+| Web / UI | `spring-boot-starter-web` + `spring-boot-starter-thymeleaf` + `spring-boot-starter-validation` |
 | Persistence | `spring-boot-starter-data-jpa` |
-| Database | **H2 in-memory** (`jdbc:h2:mem:researchmatch`) — no external DB, no migrations tooling |
-| Build | **Maven** (`pom.xml`, root) |
-| Unit tests | **JUnit 5** (`org.junit.jupiter`) + AssertJ from `spring-boot-starter-test` |
+| Database | **H2 in-memory** (`jdbc:h2:mem:researchmatch`) — no external DB, no migration tooling |
+| Build | **Maven** (`pom.xml` at root) |
+| Unit tests | **JUnit 5** (`org.junit.jupiter`) + AssertJ |
 | Mocks | **Mockito** (via `spring-boot-starter-test`) |
-| Coverage | **JaCoCo** — HTML + XML reports in `target/site/jacoco/` |
+| Coverage | **JaCoCo** — HTML + XML in `target/site/jacoco/`; **≥ 85 % branch coverage** required on feature PRs |
 
-Do not add new dependencies, change the Spring Boot version, or swap the database without explicit
-group approval. Do not modify `pom.xml` unless your task is explicitly about the build.
+Do not add dependencies, change the Spring Boot version, or swap the database without group approval.
 
 ### Build & run
 
 ```bash
 mvn clean test jacoco:report     # tests + coverage report
-mvn clean package -DskipTests    # builds executable target/researchmatch.jar
+mvn clean package                # tests + executable target/researchmatch.jar
+mvn verify                       # adds the 85 % branch coverage gate
 run.bat                          # java -jar target/researchmatch.jar
 ```
 
 ---
 
-## 2. Strict folder ownership
+## 2. Strict folder & file ownership
 
-Only edit files inside the area you are assigned for the current task. **Never** edit files outside it,
-even to "fix" a compile error — report the problem to the owning member instead.
+Only edit files inside **your** area for the current task. Never edit another member's files — not even to
+fix a compile error. Report it instead.
 
-| Folder | Owner | Notes |
+| Area | Owner | Notes |
 | --- | --- | --- |
-| `src/main/java/com/researchmatch/models/` | **Member 1** | **FROZEN.** Do not change fields, defaults, or mapping without Member 1 + group sign-off. |
-| `src/main/java/com/researchmatch/repository/` | **Member 1** | **FROZEN.** Includes `SystemConfigManager` (Singleton). |
-| `src/main/java/com/researchmatch/matching/` | **Member 2** | Chain of Responsibility + Strategy. |
-| `src/main/java/com/researchmatch/adapters/` | **Member 3** | Adapter. |
-| `src/main/java/com/researchmatch/pipeline/` | **Member 3** | State + Observer. |
-| `src/main/java/com/researchmatch/factory/` | **Member 3** | Builder. |
-| `src/main/java/com/researchmatch/controllers/` | **Member 4** | Facade + UI controllers. |
-| `src/main/resources/templates/` | **Member 4** | Thymeleaf views. |
-| `src/test/java/com/researchmatch/` | **Everyone** | Must **mirror** the main package of the code you touched. |
+| `models/` | **Member 1** | **FROZEN.** |
+| `repository/` incl. `SystemConfigManager` | **Member 1** | **FROZEN.** |
+| `config/` exceptions & `ResearchDataSourceRegistry` | **Member 1** | **FROZEN.** |
+| `config/DataSeeder.java` + `config/AdapterRegistry.java` | **Member 3** | Only these two files. |
+| `matching/` | **Member 2** | Chain of Responsibility + Strategy. |
+| `adapters/`, `pipeline/`, `factory/` | **Member 3** | Adapter, State, Observer, Builder. |
+| `controllers/`, `src/main/resources/templates/` | **Member 4** | Facade + UI. |
+| `src/test/java/com/researchmatch/` | Everyone | Mirrors main packages; see §5. |
+| `pom.xml`, `application.properties`, `AGENTS.md`, `docs/`, CI | Group | Change only with approval. |
 
-Shared, low-risk files (`pom.xml`, `application.properties`, `AGENTS.md`, `README.md`, CI) require
-group agreement; leave them alone unless your task explicitly covers them.
-
-`FROZEN` means read-only for everyone except the owner: match by field/behaviour, never by editing.
+`FROZEN` means read-only for everyone except the owner.
 
 ---
 
-## 3. Required design patterns & exact class names
+## 3. Collaboration rules
 
-Names below are contractual (they may be referenced by tests, docs and the report). Do not rename.
-
-### Chain of Responsibility — `com.researchmatch.matching`
-
-| Class | Responsibility |
-| --- | --- |
-| `MatchLayerHandler` | Abstract base: holds the next handler, `setNext(...)`, `handle(...)` |
-| `EligibilityFilterHandler` | Drops candidates that fail hard eligibility rules |
-| `SemanticMatchHandler` | Scores interest/description similarity |
-| `EvidenceScoreHandler` | Weighs verified skill evidence |
-| `ExplanationHandler` | Produces human-readable explanation summary + prep advice |
-
-### Strategy — `com.researchmatch.matching`
-
-| Class | Responsibility |
-| --- | --- |
-| `RankingStrategy` | Interface for ordering/scoring match results |
-| `BalancedMatchStrategy` | Default weighting |
-| `BeginnerFriendlyStrategy` | Favours beginner-friendly opportunities |
-| `SkillStrictStrategy` | Penalises missing required skills |
-
-### State & Observer — `com.researchmatch.pipeline`
-
-| Class | Responsibility |
-| --- | --- |
-| `ApplicationState` | State interface for an application |
-| `NewState`, `ShortlistedState`, `InterviewState`, `AcceptedState`, `RejectedState` | Concrete states |
-| `ApplicationSubject` | Observer subject (attach/detach/notify) |
-| `ApplicationObserver` | Observer interface |
-| `AuditLogObserver` | Writes `AuditEvent` rows |
-| `NotificationObserver` | Notifies the student |
-
-### Adapter — `com.researchmatch.adapters`
-
-`ResearchDataAdapter` (interface), `OpenAlexPublicationAdapter`, `GitHubSkillAdapter`.
-
-### Builder — `com.researchmatch.factory`
-
-`OpportunityBuilder`, `MatchResultBuilder`.
-
-### Facade & Singleton
-
-`ResearchMatchFacade` (`com.researchmatch.controllers`), `SystemConfigManager`
-(`com.researchmatch.repository`, already implemented — extend only via Member 1).
+1. **Replace the `TODO` stubs in place.** Do not create duplicate classes, parallel interfaces, or
+   differently-named methods. The baseline exists precisely so all five branches compile against each other.
+2. Every unimplemented entry point throws `UnsupportedOperationException("TODO (Member X): ...")`. Keep that
+   pattern: **never** return a fake successful result, an empty "success", or silently swallow input.
+3. **Public contracts in `docs/integration-contracts.md` must not be modified without group approval.**
+   Adding a method is a contract change too. Record approved changes in the doc's change log.
+4. **Mock what is not yours.** If a dependency is not merged or still a `TODO`, mock it
+   (`Mockito.mock(...)`, `@Mock`, `@MockBean`). Never implement another member's business logic to unblock
+   yourself.
+5. Business rules live in exactly one place: matching rules in `matching/`, recruitment rules in
+   `pipeline/`, orchestration in `controllers/`.
+6. `controllers/` may import `matching/`, `pipeline/`, `adapters/`, `models/`, `repository/`, `config/`.
+   `matching/`, `pipeline/`, `adapters/`, `factory/` must **never** import `controllers/`.
+7. Keep commits scoped to your folder; one task per PR.
 
 ---
 
 ## 4. Privacy rule (hard requirement)
 
-`StudentProfile.searchableByFaculty` **MUST default to `false`**, in the field initialiser, in every
-constructor, and in the database column (`nullable = false`). Opt-in only.
+`StudentProfile.searchableByFaculty` **MUST default to `false`** — field initialiser, every constructor, and
+the DB column (`nullable = false`).
 
-- Never add a constructor or builder that sets it to `true` by default.
-- Every faculty-facing query must be privacy-aware (see `StudentRepository#findBySearchableByFacultyTrue`).
-- Any test touching this field must assert the `false` default.
+- No constructor or builder may default it to `true`.
+- Any faculty-facing query must be privacy-aware (`StudentRepository#findBySearchableByFacultyTrue`), and
+  `ResearchMatchFacade#discoverCandidates` must exclude non-searchable students.
+- Every test touching this field must assert the `false` default.
 
 ---
 
 ## 5. Testing & coverage rules
 
-- Every feature PR **MUST include JUnit 5 tests**.
-- New/changed code must reach **≥ 85 % branch coverage** total (`mvn verify` enforces it via the
-  JaCoCo `check` goal; `mvn clean test jacoco:report` produces the report).
-- Tests mirror main packages: code in `matching/X.java` → test in
-  `src/test/java/com/researchmatch/matching/XTest.java`.
-- Use Mockito for collaborators (repositories, adapters) rather than hitting H2, except in
-  `@SpringBootTest` / persistence tests.
-- A PR that lowers branch coverage below 85 % must not be merged.
+- Every feature PR **MUST include JUnit 5 tests**; new/changed code must keep the bundle at
+  **≥ 85 % branch coverage** (`mvn verify` enforces it).
+- Tests mirror main packages: `matching/X.java` → `src/test/java/com/researchmatch/matching/XTest.java`.
+- Each member owns the tests for their components. **Member 5** owns end-to-end integration tests
+  (`src/test/java/com/researchmatch/integration/`) and coordinates coverage improvements — coordinate
+  before touching another member's test package.
+- Use Mockito for collaborators; use `@SpringBootTest` only for wiring/integration.
+- `ApplicationContextTest` is the baseline wiring check: if it fails, the branch does not integrate.
+- `config/DataSeeder` runs on startup, so the test DB is **not empty**. Do not assert `count() == 0`.
 
-## 6. Working agreements
+---
 
-- One task = one small, reviewable change; keep commits scoped to your folder.
-- Do not reformat or "clean up" files you don't own.
-- Update `README.md`/`AGENTS.md` design-pattern lists only if the group agrees.
-- If you must deviate from a name or rule above, document the reason in the PR and get review first.
+## 6. Required design patterns & exact names
+
+Names are contractual — see `docs/integration-contracts.md` for full signatures.
+
+| Pattern | Classes | Package |
+| --- | --- | --- |
+| Chain of Responsibility | `MatchLayerHandler`, `AbstractMatchLayerHandler`, `EligibilityFilterHandler`, `SemanticMatchHandler`, `EvidenceScoreHandler`, `ExplanationHandler` | `matching` |
+| Strategy | `RankingStrategy`, `BalancedMatchStrategy`, `BeginnerFriendlyStrategy`, `SkillStrictStrategy` | `matching` |
+| Service | `MatchingEngine`, `MatchContext` | `matching` |
+| Builder | `OpportunityBuilder`, `MatchResultBuilder` | `factory` |
+| Adapter | `ResearchDataAdapter`, `GitHubSkillAdapter`, `OpenAlexPublicationAdapter`, `ImportedEvidence` | `adapters` |
+| State | `ApplicationState`, `AbstractApplicationState`, `NewState`, `ShortlistedState`, `InterviewState`, `AcceptedState`, `RejectedState`, `ApplicationStateFactory` | `pipeline` |
+| Observer | `ApplicationSubject`, `ApplicationObserver`, `AuditLogObserver`, `NotificationObserver` | `pipeline` |
+| Service | `RecruitmentPipeline` | `pipeline` |
+| Facade | `ResearchMatchFacade` | `controllers` |
+| Singleton | `SystemConfigManager` (`getInstance()`; the Spring bean is the same instance) | `repository` |
