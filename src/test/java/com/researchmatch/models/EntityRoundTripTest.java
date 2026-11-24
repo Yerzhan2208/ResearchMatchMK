@@ -29,6 +29,8 @@ class EntityRoundTripTest {
         assertThat(profile.getAcademicYear()).isEqualTo(3);
         assertThat(profile.getHoursPerWeek()).isEqualTo(12);
         assertThat(profile.getGithubUsername()).isEqualTo("ann-dev");
+        assertThat(StudentProfile.MIN_ACADEMIC_YEAR).isEqualTo(1);
+        assertThat(StudentProfile.MAX_ACADEMIC_YEAR).isEqualTo(4);
         assertThat(profile).isEqualTo(twin).hasSameHashCodeAs(twin).isNotEqualTo(new StudentProfile());
         assertThat(new StudentProfile().equals(new Object())).isFalse();
     }
@@ -65,8 +67,9 @@ class EntityRoundTripTest {
         opportunity.setCompensationType("CREDIT");
         opportunity.setBeginnerFriendly(true);
         opportunity.setMaxApplicants(3);
+        opportunity.setMinAcademicYear(2);
 
-        Opportunity twin = new Opportunity(2L, 7L, "NLP research", "Work on transformers");
+        Opportunity twin = new Opportunity(2L, 7L, "NLP research", "Work on transformers", 2);
 
         assertThat(opportunity.getId()).isEqualTo(2L);
         assertThat(opportunity.getFacultyId()).isEqualTo(7L);
@@ -78,7 +81,22 @@ class EntityRoundTripTest {
         assertThat(opportunity.getCompensationType()).isEqualTo("CREDIT");
         assertThat(opportunity.isBeginnerFriendly()).isTrue();
         assertThat(opportunity.getMaxApplicants()).isEqualTo(3);
+        assertThat(opportunity.getMinAcademicYear()).isEqualTo(2);
         assertThat(opportunity).isEqualTo(twin).hasSameHashCodeAs(twin).isNotEqualTo(new Opportunity());
+    }
+
+    @Test
+    void opportunityMinAcademicYearDefaultsToOne() {
+        // Existing 4-arg callers (and the no-arg constructor) must stay "open to all undergraduates".
+        assertThat(new Opportunity().getMinAcademicYear()).isEqualTo(1);
+        assertThat(new Opportunity(1L, 2L, "t", "d").getMinAcademicYear()).isEqualTo(1);
+
+        Opportunity normalised = new Opportunity();
+        normalised.setMinAcademicYear(null);
+        assertThat(normalised.getMinAcademicYear()).isEqualTo(1);
+
+        assertThat(new Opportunity(1L, 2L, "t", "d", null).getMinAcademicYear()).isEqualTo(1);
+        assertThat(new Opportunity(1L, 2L, "t", "d", 3).getMinAcademicYear()).isEqualTo(3);
     }
 
     @Test

@@ -81,13 +81,39 @@ All ids are `Long`. All collections are initialised non-null. All entities use i
 | --- | --- |
 | `StudentProfile` | `id, name, email, major, academicYear, hoursPerWeek, interests, claimedSkills, verifiedSkills, githubUsername, searchableByFaculty` |
 | `FacultyProfile` | `id, name, department, researchAreas, openAlexId` |
-| `Opportunity` | `id, facultyId, title, description, requiredSkills, preferredSkills, hoursPerWeek, compensationType, beginnerFriendly, maxApplicants` |
+| `Opportunity` | `id, facultyId, title, description, requiredSkills, preferredSkills, hoursPerWeek, compensationType, beginnerFriendly, maxApplicants, minAcademicYear` |
 | `Application` | `id, studentId, opportunityId, status, statement, evidenceLinks, notes, updatedAt` (`updatedAt` auto-stamped on save) |
 | `SkillEvidence` | `id, studentId, skillName, repoName, evidenceSnippet, verifiedByStudent` |
 | `MatchResult` | `id, studentId, opportunityId, totalScore, eligible, matchedSkills, missingSkills, explanationSummary, recommendedPrep` |
 | `AuditEvent` | `id, entityId, action, details, timestamp` (auto-stamped) |
 
 `Application.Status`: `NEW, SHORTLISTED, INTERVIEW, ACCEPTED, REJECTED` (stored as `STRING`).
+
+### Academic-year fields (eligibility input)
+
+| Field | Type | Range / default | Notes |
+| --- | --- | --- | --- |
+| `StudentProfile.academicYear` | `Integer` | `1`–`4`; may be `null` if unfilled | Constant bounds: `StudentProfile.MIN_ACADEMIC_YEAR` / `MAX_ACADEMIC_YEAR`. |
+| `Opportunity.minAcademicYear` | `Integer` | `1`–`4`; **defaults to `1`** (open to all undergraduates) | `setMinAcademicYear(null)` normalises to `1`. |
+
+`Opportunity` constructors (the 4-arg form is unchanged — it now delegates with `minAcademicYear = 1`):
+
+```java
+new Opportunity();                                                        // minAcademicYear = 1
+new Opportunity(Long id, Long facultyId, String title, String description);          // minAcademicYear = 1
+new Opportunity(Long id, Long facultyId, String title, String description, Integer minAcademicYear);
+Integer getMinAcademicYear();  void setMinAcademicYear(Integer);          // null ⇒ 1
+```
+
+**Layer 1 eligibility rule (Member 2, `EligibilityFilterHandler`).** A candidate must be rejected when:
+
+```java
+opportunity.getMinAcademicYear() != null
+    && (student.getAcademicYear() == null || student.getAcademicYear() < opportunity.getMinAcademicYear())
+```
+
+On rejection: `context.markIneligible(...)` with a note naming the required/actual year, and return
+`MatchLayerHandler.LayerResult.STOP`.
 
 **Privacy rule:** `StudentProfile.searchableByFaculty` is `false` by default and `nullable = false` in the DB.
 
@@ -204,10 +230,12 @@ new OpportunityBuilder()
         .requiredSkills(Collection<String>).preferredSkills(Collection<String>)
         .hoursPerWeek(Integer).compensationType(String)
         .beginnerFriendly(boolean).maxApplicants(Integer)
+        .minAcademicYear(Integer)                  // optional; null ⇒ 1
         .build();                                  // InvalidRequestException on bad input
 ```
 
-`build()` rejects: null `facultyId`; null/blank `title`; `hoursPerWeek <= 0`; `maxApplicants <= 0`.
+`build()` rejects: null `facultyId`; null/blank `title`; `hoursPerWeek <= 0`; `maxApplicants <= 0`;
+`minAcademicYear` outside `1`–`4`.
 
 ### Adapters
 
@@ -374,6 +402,7 @@ subject.notifyStatusChanged(app, from, app.getStatus());
 Opportunity opportunity = new OpportunityBuilder()
         .facultyId(facultyId).title("NLP for course feedback")
         .requiredSkills(Set.of("Java")).beginnerFriendly(true).maxApplicants(3)
+        .minAcademicYear(2)                       // second-year and above
         .build();
 facade.saveOpportunity(opportunity);
 List<StudentProfile> candidates = facade.discoverCandidates(facultyId);   // privacy-filtered
@@ -427,6 +456,7 @@ Circular dependency risk: none. `models`/`repository` ← everyone; `matching` �
 | Date | Change | Approved by |
 | --- | --- | --- |
 | baseline | Initial contracts (this file) | Member 1 |
+| schema-1 | Added `Opportunity.minAcademicYear` (default `1`, 4-arg constructor preserved) + `OpportunityBuilder.minAcademicYear(Integer)`; documented `StudentProfile.academicYear` (1–4) and the Layer 1 eligibility rule | Member 1 |
 
 ---
 
