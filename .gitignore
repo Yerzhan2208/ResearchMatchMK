@@ -1,1 +1,20 @@
 opencode.json
+
+# Maven / Java
+target/
+!.mvn/wrapper/maven-wrapper.jar
+*.jar
+*.class
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# OS
+.DS_Store
+Thumbs.db
