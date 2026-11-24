@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Discover')}"></head>
+<body class="bg-slate-50 text-slate-800">
+<header th:replace="~{fragments :: nav}"></header>
+<section th:replace="~{fragments :: flash}"></section>
+
+<main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-semibold">Research Discovery Feed</h1>
+            <p class="text-sm text-slate-500 mt-1">
+                Ranked opportunities with fit scores, explanations and skill-gap guidance.
+            </p>
+        </div>
+
+        <!-- Ranking strategy selector: plain GET form keeps the logic server-side. -->
+        <form th:action="@{/discover}" method="get" class="flex items-center gap-2">
+            <label for="strategy" class="text-sm text-slate-600">Ranking</label>
+            <select id="strategy" name="strategy" onchange="this.form.submit()"
+                    class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <option th:each="s : ${strategies}" th:value="${s}" th:text="${s}"
+                        th:selected="${s == strategy}"></option>
+            </select>
+            <noscript><button type="submit" class="rounded-lg bg-indigo-600 px-3 py-2 text-sm text-white">Apply</button></noscript>
+        </form>
+    </div>
+
+    <!-- Error state -->
+    <div th:if="${feedError}" class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <p class="font-medium">We could not rank opportunities right now.</p>
+        <p th:text="${feedError}" class="mt-1 text-amber-700"></p>
+    </div>
+
+    <!-- Empty state -->
+    <div th:if="${#lists.isEmpty(feed) and feedError == null}"
+         class="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center">
+        <p class="text-slate-600 font-medium">No matches yet.</p>
+        <p class="text-sm text-slate-400 mt-1">Add skills to your profile, then check back for opportunities.</p>
+        <a th:href="@{/profile}" class="mt-4 inline-block rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white">Edit profile</a>
+    </div>
+
+    <!-- Ranked feed -->
+    <ul class="space-y-4">
+        <li th:each="item : ${feed}"
+            class="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h2 class="text-lg font-semibold" th:text="${item.opportunity.title}">Opportunity</h2>
+                        <span th:if="${item.opportunity.beginnerFriendly}"
+                              class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">Beginner friendly</span>
+                        <span th:unless="${item.match.eligible}"
+                              class="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700">Not eligible</span>
+                    </div>
+                    <p class="text-sm text-slate-500 mt-1" th:text="${item.opportunity.description}">Description</p>
+
+                    <dl class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                        <div>
+                            <dt class="text-slate-400 text-xs uppercase tracking-wide">Fit score</dt>
+                            <dd class="font-semibold"
+                                th:text="${#numbers.formatDecimal(item.match.totalScore, 1, 2)}">0.00</dd>
+                        </div>
+                        <div>
+                            <dt class="text-slate-400 text-xs uppercase tracking-wide">Hours / week</dt>
+                            <dd th:text="${item.opportunity.hoursPerWeek} ?: '—'">—</dd>
+                        </div>
+                        <div>
+                            <dt class="text-slate-400 text-xs uppercase tracking-wide">Compensation</dt>
+                            <dd th:text="${item.opportunity.compensationType} ?: '—'">—</dd>
+                        </div>
+                        <div>
+                            <dt class="text-slate-400 text-xs uppercase tracking-wide"> Applicants</dt>
+                            <dd th:text="${item.opportunity.maxApplicants} ?: '—'">—</dd>
+                        </div>
+                    </dl>
+
+                    <div class="mt-3 space-y-2">
+                        <div th:if="${item.match.explanationSummary != null and !item.match.explanationSummary.isBlank()}">
+                            <p class="text-xs uppercase tracking-wide text-slate-400">Why this fits</p>
+                            <p class="text-sm text-slate-700" th:text="${item.match.explanationSummary}">Explanation</p>
+                        </div>
+                        <div th:if="${not #sets.isEmpty(item.match.matchedSkills)}">
+                            <p class="text-xs uppercase tracking-wide text-slate-400">Matched skills</p>
+                            <div class="flex flex-wrap gap-1 mt-1">
+                                <span th:each="sk : ${item.match.matchedSkills}"
+                                      class="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700"
+                                      th:text="${sk}">skill</span>
+                            </div>
+                        </div>
+                        <div th:if="${not #sets.isEmpty(item.match.missingSkills)}">
+                            <p class="text-xs uppercase tracking-wide text-slate-400">Skill gaps</p>
+                            <div class="flex flex-wrap gap-1 mt-1">
+                                <span th:each="sk : ${item.match.missingSkills}"
+                                      class="rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700"
+                                      th:text="${sk}">gap</span>
+                            </div>
+                        </div>
+                        <div th:if="${item.match.recommendedPrep != null and !item.match.recommendedPrep.isBlank()}">
+                            <p class="text-xs uppercase tracking-wide text-slate-400">Recommended prep</p>
+                            <p class="text-sm text-slate-700" th:text="${item.match.recommendedPrep}">Prep</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="shrink-0">
+                    <button type="button"
+                            class="apply-open rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            th:attr="data-opportunity-id=${item.opportunity.id},data-opportunity-title=${item.opportunity.title}">
+                        Apply
+                    </button>
+                </div>
+            </div>
+        </li>
+    </ul>
+
+    <!-- My applications -->
+    <section th:if="${not #lists.isEmpty(applications)}" class="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 class="text-lg font-semibold mb-3">My applications</h2>
+        <table class="w-full text-sm">
+            <thead>
+            <tr class="text-left text-slate-400 border-b border-slate-100">
+                <th class="py-2">Application</th>
+                <th class="py-2">Status</th>
+                <th class="py-2">Updated</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="app : ${applications}" class="border-b border-slate-50">
+                <td class="py-2" th:text="'#' + ${app.id}">#</td>
+                <td class="py-2">
+                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+                          th:text="${app.status}">NEW</span>
+                </td>
+                <td class="py-2 text-slate-500" th:text="${app.updatedAt} ?: '—'">—</td>
+            </tr>
+            </tbody>
+        </table>
+    </section>
+</main>
+
+<!-- Application modal: only presentation toggling is client-side. -->
+<div id="applyModal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4">
+    <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+        <div class="flex items-start justify-between">
+            <div>
+                <h3 class="text-lg font-semibold">Apply</h3>
+                <p id="applyTitle" class="text-sm text-slate-500"></p>
+            </div>
+            <button type="button" id="applyClose" class="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
+        </div>
+        <form th:action="@{/apply}" method="post" class="mt-4 space-y-3">
+            <input type="hidden" name="opportunityId" id="applyOpportunityId"/>
+            <div>
+                <label for="statement" class="block text-sm font-medium text-slate-700">Statement</label>
+                <textarea id="statement" name="statement" rows="5" maxlength="4000" required
+                          class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="Why are you a good fit for this research? (required)"></textarea>
+            </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" id="applyCancel"
+                        class="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600">Cancel</button>
+                <button type="submit"
+                        class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">Submit application</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<footer th:replace="~{fragments :: footer}"></footer>
+
+<script>
+    (function () {
+        var modal = document.getElementById('applyModal');
+        var titleEl = document.getElementById('applyTitle');
+        var idEl = document.getElementById('applyOpportunityId');
+        function open(btn) {
+            idEl.value = btn.getAttribute('data-opportunity-id');
+            titleEl.textContent = btn.getAttribute('data-opportunity-title') || '';
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+        function close() {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+        document.querySelectorAll('.apply-open').forEach(function (btn) {
+            btn.addEventListener('click', function () { open(btn); });
+        });
+        document.getElementById('applyClose').addEventListener('click', close);
+        document.getElementById('applyCancel').addEventListener('click', close);
+        modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+    })();
+</script>
+</body>
+</html>

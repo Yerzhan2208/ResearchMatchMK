@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('My Profile')}"></head>
+<body class="bg-slate-50 text-slate-800">
+<header th:replace="~{fragments :: nav}"></header>
+<section th:replace="~{fragments :: flash}"></section>
+
+<main class="max-w-6xl mx-auto px-4 py-6 grid lg:grid-cols-3 gap-6">
+
+    <!-- Profile editor -->
+    <section class="lg:col-span-2 rounded-xl border border-slate-200 bg-white p-6">
+        <h1 class="text-2xl font-semibold">My Profile</h1>
+        <p class="text-sm text-slate-500 mt-1">Keep your details current to improve match quality.</p>
+
+        <div th:if="${currentStudent == null}" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            No demo student profile is available.
+        </div>
+
+        <form th:if="${currentStudent != null}" th:action="@{/profile}" method="post" class="mt-5 grid sm:grid-cols-2 gap-4">
+            <div>
+                <label for="name" class="block text-sm font-medium text-slate-700">Name <span class="text-rose-500">*</span></label>
+                <input id="name" name="name" required maxlength="120"
+                       th:value="${currentStudent.name}"
+                       class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+            </div>
+            <div>
+                <label for="email" class="block text-sm font-medium text-slate-700">E-mail <span class="text-rose-500">*</span></label>
+                <input id="email" name="email" type="email" required maxlength="200"
+                       th:value="${currentStudent.email}"
+                       class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+            </div>
+            <div>
+                <label for="major" class="block text-sm font-medium text-slate-700">Major</label>
+                <input id="major" name="major" maxlength="120" th:value="${currentStudent.major}"
+                       class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label for="academicYear" class="block text-sm font-medium text-slate-700">Year</label>
+                    <input id="academicYear" name="academicYear" type="number" min="1" max="8"
+                           th:value="${currentStudent.academicYear}"
+                           class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                </div>
+                <div>
+                    <label for="hoursPerWeek" class="block text-sm font-medium text-slate-700">Hours / week</label>
+                    <input id="hoursPerWeek" name="hoursPerWeek" type="number" min="1" max="168"
+                           th:value="${currentStudent.hoursPerWeek}"
+                           class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                </div>
+            </div>
+            <div class="sm:col-span-2">
+                <label for="interests" class="block text-sm font-medium text-slate-700">Interests <span class="text-slate-400 font-normal">(comma separated)</span></label>
+                <input id="interests" name="interests"
+                       th:value="${currentStudent.interests != null ? #strings.listJoin(currentStudent.interests, ', ') : ''}"
+                       class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+            </div>
+            <div class="sm:col-span-2">
+                <label for="claimedSkills" class="block text-sm font-medium text-slate-700">Claimed skills <span class="text-slate-400 font-normal">(comma separated)</span></label>
+                <input id="claimedSkills" name="claimedSkills"
+                       th:value="${currentStudent.claimedSkills != null ? #strings.listJoin(currentStudent.claimedSkills, ', ') : ''}"
+                       class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+            </div>
+
+            <!-- Privacy opt-in: default off, explicit choice required. -->
+            <div class="sm:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <label class="flex items-start gap-3 cursor-pointer">
+                    <input type="checkbox" name="searchableByFaculty" value="true"
+                           th:checked="${currentStudent.searchableByFaculty}"
+                           class="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"/>
+                    <span>
+                        <span class="block text-sm font-medium text-slate-800">Make my profile discoverable by faculty</span>
+                        <span class="block text-xs text-slate-500 mt-0.5">
+                            Private by default. When enabled, professors can find your profile when reviewing candidates.
+                        </span>
+                    </span>
+                </label>
+            </div>
+
+            <div class="sm:col-span-2 flex justify-end">
+                <button type="submit"
+                        class="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    Save profile
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <!-- GitHub / evidence import -->
+    <section class="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
+        <div>
+            <h2 class="text-lg font-semibold">Import evidence</h2>
+            <p class="text-sm text-slate-500 mt-1">Pull verified skills from GitHub or OpenAlex.</p>
+        </div>
+        <form th:action="@{/profile/import}" method="post" class="space-y-3">
+            <div>
+                <label for="source" class="block text-sm font-medium text-slate-700">Source</label>
+                <select id="source" name="source"
+                        class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option th:each="src : ${importSources}" th:value="${src}" th:text="${src}"></option>
+                </select>
+            </div>
+            <div>
+                <label for="handle" class="block text-sm font-medium text-slate-700">Handle</label>
+                <input id="handle" name="handle" required maxlength="120"
+                       th:value="${currentStudent != null ? currentStudent.githubUsername : ''}"
+                       class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                       placeholder="e.g. octocat"/>
+            </div>
+            <button type="submit"
+                    class="w-full rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900">
+                Import skills
+            </button>
+        </form>
+
+        <div>
+            <h3 class="text-sm font-medium text-slate-700 mb-2">Imported evidence</h3>
+            <p th:if="${#lists.isEmpty(evidence)}" class="text-sm text-slate-400 rounded-lg border border-dashed border-slate-300 p-4 text-center">
+                No evidence imported yet.
+            </p>
+            <ul th:unless="${#lists.isEmpty(evidence)}" class="space-y-2">
+                <li th:each="ev : ${evidence}" class="rounded-lg border border-slate-200 p-3">
+                    <div class="flex items-center justify-between">
+                        <span class="font-medium text-sm" th:text="${ev.skillName}">Skill</span>
+                        <span th:if="${ev.verifiedByStudent}"
+                              class="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">verified</span>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-1" th:text="${ev.repoName} ?: ''">repo</p>
+                    <p class="text-xs text-slate-600 mt-1" th:text="${ev.evidenceSnippet} ?: ''">snippet</p>
+                </li>
+            </ul>
+        </div>
+    </section>
+</main>
+
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>
