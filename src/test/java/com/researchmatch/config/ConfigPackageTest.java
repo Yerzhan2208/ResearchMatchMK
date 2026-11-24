@@ -5,6 +5,7 @@ import com.researchmatch.models.Opportunity;
 import com.researchmatch.models.StudentProfile;
 import com.researchmatch.repository.FacultyRepository;
 import com.researchmatch.repository.OpportunityRepository;
+import com.researchmatch.repository.StudentRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -12,6 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,9 +41,10 @@ class ConfigPackageTest {
     void seederIsIdempotentWhenDataExists() {
         FacultyRepository faculty = Mockito.mock(FacultyRepository.class);
         OpportunityRepository opportunities = Mockito.mock(OpportunityRepository.class);
+        StudentRepository students = Mockito.mock(StudentRepository.class);
         when(opportunities.count()).thenReturn(2L);
 
-        new DataSeeder(faculty, opportunities).run();
+        new DataSeeder(faculty, opportunities, students).run();
 
         verify(faculty, never()).save(any());
         verify(opportunities, never()).saveAll(anyList());
@@ -51,6 +54,7 @@ class ConfigPackageTest {
     void seederPublishesSampleDataOnce() {
         FacultyRepository faculty = Mockito.mock(FacultyRepository.class);
         OpportunityRepository opportunities = Mockito.mock(OpportunityRepository.class);
+        StudentRepository students = Mockito.mock(StudentRepository.class);
         when(opportunities.count()).thenReturn(0L);
         when(faculty.save(any(com.researchmatch.models.FacultyProfile.class))).thenAnswer(invocation -> {
             com.researchmatch.models.FacultyProfile saved = invocation.getArgument(0);
@@ -58,9 +62,10 @@ class ConfigPackageTest {
             return saved;
         });
 
-        new DataSeeder(faculty, opportunities).run();
+        new DataSeeder(faculty, opportunities, students).run();
 
-        verify(faculty).save(any(com.researchmatch.models.FacultyProfile.class));
+        verify(faculty, times(3)).save(any(com.researchmatch.models.FacultyProfile.class));
         verify(opportunities).saveAll(anyList());
+        verify(students).saveAll(anyList());
     }
 }

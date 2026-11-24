@@ -55,7 +55,12 @@ public class MatchResultBuilder {
         return this;
     }
 
-    /** TODO (Member 3): add any invariants (e.g. score bounds) agreed with Member 2. */
+    /**
+     * Returns the fully initialised result.
+     *
+     * <p>Intentionally free of domain invariants: score bounds and eligibility are the matching chain's
+     * (Member 2) rules, and duplicating them here would give the same rule two owners.
+     */
     public MatchResult build() {
         return result;
     }
