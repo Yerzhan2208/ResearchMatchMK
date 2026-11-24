@@ -102,16 +102,11 @@ class MatchingContractsTest {
     }
 
     @Test
-    void handlersDeclareTheirLayerAndTodoBehaviour() {
+    void handlersDeclareTheirLayer() {
         assertThat(new EligibilityFilterHandler().layerName()).isEqualTo(EligibilityFilterHandler.LAYER);
         assertThat(new SemanticMatchHandler().layerName()).isEqualTo(SemanticMatchHandler.LAYER);
         assertThat(new EvidenceScoreHandler().layerName()).isEqualTo(EvidenceScoreHandler.LAYER);
         assertThat(new ExplanationHandler().layerName()).isEqualTo(ExplanationHandler.LAYER);
-
-        MatchContext context = new MatchContext(new StudentProfile(), new Opportunity());
-        assertThatThrownBy(() -> new EligibilityFilterHandler().evaluate(context))
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessageContaining("EligibilityFilterHandler");
     }
 
     @Test
