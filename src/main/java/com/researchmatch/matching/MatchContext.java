@@ -129,6 +129,10 @@ public final class MatchContext {
 
     /** Skills the student can back with evidence (verified skills). */
     public Set<String> verifiedSkillSet() {
-        return student.getVerifiedSkills().stream().filter(Objects::nonNull).collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<String> verified = student.getVerifiedSkills();
+        if (verified == null) {
+            return new LinkedHashSet<>();
+        }
+        return verified.stream().filter(Objects::nonNull).collect(Collectors.toCollection(LinkedHashSet::new));
     }
 }
