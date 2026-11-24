@@ -15,8 +15,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class PipelineContractsTest {
 
-    private static final List<ApplicationState> ALL_STATES = List.of(
-            new NewState(), new ShortlistedState(), new InterviewState(), new AcceptedState(), new RejectedState());
+    /** The same state graph Spring wires: each state holds the ones it can move to. */
+    private static final AcceptedState ACCEPTED = new AcceptedState();
+    private static final RejectedState REJECTED = new RejectedState();
+    private static final InterviewState INTERVIEW = new InterviewState(ACCEPTED, REJECTED);
+    private static final ShortlistedState SHORTLISTED = new ShortlistedState(INTERVIEW, REJECTED);
+    private static final NewState NEW = new NewState(SHORTLISTED, REJECTED);
+
+    private static final List<ApplicationState> ALL_STATES =
+            List.of(NEW, SHORTLISTED, INTERVIEW, ACCEPTED, REJECTED);
 
     @Test
     void everyStateMapsToExactlyOneStatus() {
@@ -36,12 +43,11 @@ class PipelineContractsTest {
 
     @Test
     void factoryFailsFastOnMissingOrDuplicateStates() {
-        assertThatThrownBy(() -> new ApplicationStateFactory(List.of(new NewState())))
+        assertThatThrownBy(() -> new ApplicationStateFactory(List.of(NEW)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Missing ApplicationState");
         assertThatThrownBy(() -> new ApplicationStateFactory(
-                List.of(new NewState(), new NewState(), new ShortlistedState(), new InterviewState(),
-                        new AcceptedState(), new RejectedState())))
+                List.of(NEW, NEW, SHORTLISTED, INTERVIEW, ACCEPTED, REJECTED)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Duplicate");
         assertThatThrownBy(() -> new ApplicationStateFactory(null)).isInstanceOf(NullPointerException.class);
@@ -57,26 +63,21 @@ class PipelineContractsTest {
     @Test
     void disallowedTransitionsRaiseIllegalStateTransition() {
         // An invalid move must never fall through silently; the message names the attempted transition.
-        assertThatThrownBy(() -> new AcceptedState().shortlist())
+        assertThatThrownBy(() -> ACCEPTED.shortlist())
                 .isInstanceOf(IllegalStateTransitionException.class)
                 .hasMessageContaining("shortlist");
-        assertThatThrownBy(() -> new RejectedState().reject())
+        assertThatThrownBy(() -> REJECTED.reject())
                 .isInstanceOf(IllegalStateTransitionException.class)
                 .hasMessageContaining("REJECTED");
     }
 
     @Test
-    void placeholderTransitionsAreExplicitTodos() {
-        // Allowed moves are Member 3's work; until then they must fail loudly, not return a wrong state.
-        assertThatThrownBy(() -> new NewState().shortlist())
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessageStartingWith("TODO (Member 3)");
-        assertThatThrownBy(() -> new ShortlistedState().interview())
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessageContaining("ShortlistedState");
-        assertThatThrownBy(() -> new InterviewState().accept())
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessageContaining("InterviewState");
+    void allowedTransitionsLandOnTheirTargetState() {
+        // The full matrix is covered exhaustively by ApplicationStateMachineTest; this keeps the
+        // contract-level smoke check that each allowed move reaches its documented status.
+        assertThat(NEW.shortlist().status()).isEqualTo(Application.Status.SHORTLISTED);
+        assertThat(SHORTLISTED.interview().status()).isEqualTo(Application.Status.INTERVIEW);
+        assertThat(INTERVIEW.accept().status()).isEqualTo(Application.Status.ACCEPTED);
     }
 
     @Nested
@@ -123,56 +124,44 @@ class PipelineContractsTest {
         }
 
         @Test
-        void notifyIsStillATodo() {
+        void notifyFansOutToEveryObserverOnce() {
             ApplicationSubject subject = new ApplicationSubject(List.of(recording("a")));
             Application application = new Application(1L, 1L, 1L);
             Instant before = Instant.now();
 
-            assertThatThrownBy(() -> subject.notifyStatusChanged(
-                    application, Application.Status.NEW, Application.Status.SHORTLISTED))
-                    .isInstanceOf(UnsupportedOperationException.class)
-                    .hasMessageContaining("TODO (Member 3)");
-            assertThat(calls).isEmpty();
+            subject.notifyStatusChanged(application, Application.Status.NEW, Application.Status.SHORTLISTED);
+
+            assertThat(calls).containsExactly("a:NEW->SHORTLISTED");
             assertThat(before).isNotNull();
         }
     }
 
     @Test
-    void observersAreExplicitTodos() {
+    void observersAreWiredToTheirCollaborators() {
         Application application = new Application(1L, 1L, 1L);
         Instant now = Instant.now();
+        com.researchmatch.repository.AuditEventRepository auditEventRepository =
+                org.mockito.Mockito.mock(com.researchmatch.repository.AuditEventRepository.class);
 
-        assertThatThrownBy(() -> new AuditLogObserver().onStatusChanged(
-                application, Application.Status.NEW, Application.Status.SHORTLISTED, now))
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessageContaining("AuditLogObserver");
-        assertThatThrownBy(() -> new NotificationObserver().onStatusChanged(
-                application, Application.Status.NEW, Application.Status.SHORTLISTED, now))
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessageContaining("NotificationObserver");
+        new AuditLogObserver(auditEventRepository)
+                .onStatusChanged(application, Application.Status.NEW, Application.Status.SHORTLISTED, now);
+        new NotificationObserver()
+                .onStatusChanged(application, Application.Status.NEW, Application.Status.SHORTLISTED, now);
+
+        org.mockito.Mockito.verify(auditEventRepository).save(
+                org.mockito.ArgumentMatchers.any(com.researchmatch.models.AuditEvent.class));
         assertThat(AuditLogObserver.ACTION).isEqualTo("APPLICATION_STATUS_CHANGED");
     }
 
     @Test
-    void recruitmentPipelineEntriesAreExplicitTodos() {
+    void recruitmentPipelineIsConstructibleFromTheContractSignature() {
         RecruitmentPipeline pipeline = new RecruitmentPipeline(
                 org.mockito.Mockito.mock(com.researchmatch.repository.ApplicationRepository.class),
                 org.mockito.Mockito.mock(com.researchmatch.repository.OpportunityRepository.class),
+                org.mockito.Mockito.mock(com.researchmatch.repository.StudentRepository.class),
                 new ApplicationStateFactory(ALL_STATES),
                 new ApplicationSubject(List.of()));
 
-        assertThatThrownBy(() -> pipeline.submit(1L, 1L, "hi"))
-                .isInstanceOf(UnsupportedOperationException.class).hasMessageContaining("submit");
-        assertThatThrownBy(() -> pipeline.shortlist(1L))
-                .isInstanceOf(UnsupportedOperationException.class).hasMessageContaining("shortlist");
-        assertThatThrownBy(() -> pipeline.scheduleInterview(1L))
-                .isInstanceOf(UnsupportedOperationException.class).hasMessageContaining("scheduleInterview");
-        assertThatThrownBy(() -> pipeline.accept(1L))
-                .isInstanceOf(UnsupportedOperationException.class).hasMessageContaining("accept");
-        assertThatThrownBy(() -> pipeline.reject(1L))
-                .isInstanceOf(UnsupportedOperationException.class).hasMessageContaining("reject");
-        assertThatThrownBy(() -> pipeline.stateOf(1L))
-                .isInstanceOf(UnsupportedOperationException.class).hasMessageContaining("stateOf");
         assertThat(pipeline.getStateFactory()).isNotNull();
         assertThat(pipeline.getSubject()).isNotNull();
     }
