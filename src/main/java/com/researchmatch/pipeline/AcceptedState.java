@@ -4,10 +4,7 @@ import com.researchmatch.models.Application;
 import org.springframework.stereotype.Component;
 
 /**
- * Terminal state: the candidate joined the project. No further transitions.
- *
- * <p>TODO (Member 3): implement {@link #describe()}; every transition must keep throwing via
- * {@code super.*()}.
+ * Terminal state: the candidate was accepted. Every transition is rejected.
  */
 @Component
 public class AcceptedState extends AbstractApplicationState {
@@ -19,6 +16,6 @@ public class AcceptedState extends AbstractApplicationState {
 
     @Override
     public String describe() {
-        throw new UnsupportedOperationException("TODO (Member 3): AcceptedState.describe");
+        return "Application is accepted; this is the final state.";
     }
 }

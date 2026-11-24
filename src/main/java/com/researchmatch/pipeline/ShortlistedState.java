@@ -4,12 +4,18 @@ import com.researchmatch.models.Application;
 import org.springframework.stereotype.Component;
 
 /**
- * Faculty shortlisted the candidate. Allowed: INTERVIEW, REJECTED.
- *
- * <p>TODO (Member 3): implement the allowed transitions.
+ * Shortlisted state: the faculty wants to hear more. Allowed: INTERVIEW, REJECTED.
  */
 @Component
 public class ShortlistedState extends AbstractApplicationState {
+
+    private final InterviewState interview;
+    private final RejectedState rejected;
+
+    public ShortlistedState(InterviewState interview, RejectedState rejected) {
+        this.interview = interview;
+        this.rejected = rejected;
+    }
 
     @Override
     public Application.Status status() {
@@ -18,16 +24,16 @@ public class ShortlistedState extends AbstractApplicationState {
 
     @Override
     public ApplicationState interview() {
-        throw new UnsupportedOperationException("TODO (Member 3): ShortlistedState.interview");
+        return interview;
     }
 
     @Override
     public ApplicationState reject() {
-        throw new UnsupportedOperationException("TODO (Member 3): ShortlistedState.reject");
+        return rejected;
     }
 
     @Override
     public String describe() {
-        throw new UnsupportedOperationException("TODO (Member 3): ShortlistedState.describe");
+        return "Application is shortlisted; schedule an interview to continue.";
     }
 }
