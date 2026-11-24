@@ -2,6 +2,7 @@ package com.researchmatch.factory;
 
 import com.researchmatch.config.InvalidRequestException;
 import com.researchmatch.models.Opportunity;
+import com.researchmatch.models.StudentProfile;
 
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -67,8 +68,18 @@ public class OpportunityBuilder {
     }
 
     /**
-     * @throws InvalidRequestException if {@code facultyId} is null, {@code title} is blank, or
-     *                                 {@code hoursPerWeek} is present but not positive
+     * Minimum academic year the candidate must have reached (1–4). Optional; defaults to {@code 1}, i.e.
+     * open to all undergraduates. A null argument is also treated as {@code 1}.
+     */
+    public OpportunityBuilder minAcademicYear(Integer minAcademicYear) {
+        opportunity.setMinAcademicYear(minAcademicYear == null ? 1 : minAcademicYear);
+        return this;
+    }
+
+    /**
+     * @throws InvalidRequestException if {@code facultyId} is null, {@code title} is blank,
+     *                                 {@code hoursPerWeek} / {@code maxApplicants} are present but not
+     *                                 positive, or {@code minAcademicYear} is outside 1–4
      */
     public Opportunity build() {
         if (opportunity.getFacultyId() == null) {
@@ -84,6 +95,11 @@ public class OpportunityBuilder {
         Integer max = opportunity.getMaxApplicants();
         if (max != null && max <= 0) {
             throw new InvalidRequestException("maxApplicants must be positive");
+        }
+        Integer minYear = opportunity.getMinAcademicYear();
+        if (minYear < StudentProfile.MIN_ACADEMIC_YEAR || minYear > StudentProfile.MAX_ACADEMIC_YEAR) {
+            throw new InvalidRequestException("minAcademicYear must be between "
+                    + StudentProfile.MIN_ACADEMIC_YEAR + " and " + StudentProfile.MAX_ACADEMIC_YEAR);
         }
         return opportunity;
     }

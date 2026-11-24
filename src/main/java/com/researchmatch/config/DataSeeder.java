@@ -49,6 +49,7 @@ public class DataSeeder implements CommandLineRunner {
                         .compensationType("CREDIT")
                         .beginnerFriendly(true)
                         .maxApplicants(3)
+                        .minAcademicYear(1)
                         .build(),
                 new OpportunityBuilder()
                         .facultyId(faculty.getId())
@@ -60,6 +61,7 @@ public class DataSeeder implements CommandLineRunner {
                         .compensationType("PAID")
                         .beginnerFriendly(false)
                         .maxApplicants(2)
+                        .minAcademicYear(2)
                         .build());
         opportunityRepository.saveAll(opportunities);
     }
