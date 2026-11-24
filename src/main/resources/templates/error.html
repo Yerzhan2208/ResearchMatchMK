@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Something went wrong')}"></head>
+<body class="bg-slate-50 text-slate-800">
+<main class="max-w-xl mx-auto px-4 py-16 text-center">
+    <div class="inline-flex h-14 w-14 items-center justify-center rounded-full bg-rose-100 text-rose-600 text-2xl font-bold">!</div>
+    <h1 class="mt-4 text-2xl font-semibold">Something went wrong</h1>
+    <p class="mt-2 text-sm text-slate-500"
+       th:text="${message} != '' ? ${message} : 'An unexpected error occurred.'">An unexpected error occurred.</p>
+    <p class="mt-1 text-xs text-slate-400" th:if="${status}" th:text="'Status ' + ${status}"></p>
+    <a th:href="@{/}" class="mt-6 inline-block rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+        Back to start
+    </a>
+</main>
+</body>
+</html>

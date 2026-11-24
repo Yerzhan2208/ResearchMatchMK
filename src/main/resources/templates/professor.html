@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Professor Dashboard')}"></head>
+<body class="bg-slate-50 text-slate-800">
+<header th:replace="~{fragments :: nav}"></header>
+<section th:replace="~{fragments :: flash}"></section>
+
+<main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+
+    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+            <h1 class="text-2xl font-semibold">Professor Dashboard</h1>
+            <p class="text-sm text-slate-500 mt-1">
+                <span th:if="${currentFaculty != null}"
+                      th:text="'Signed in as ' + ${currentFaculty.name} + ' · ' + (${currentFaculty.department} ?: '')">Faculty</span>
+                <span th:if="${currentFaculty == null}">No faculty profile available.</span>
+            </p>
+        </div>
+    </div>
+
+    <div class="grid lg:grid-cols-2 gap-6">
+        <!-- Opportunity creation -->
+        <section class="rounded-xl border border-slate-200 bg-white p-6">
+            <h2 class="text-lg font-semibold">Post an opportunity</h2>
+            <form th:if="${currentFaculty != null}" th:action="@{/opportunities}" method="post" class="mt-4 space-y-3">
+                <div>
+                    <label for="title" class="block text-sm font-medium text-slate-700">Title <span class="text-rose-500">*</span></label>
+                    <input id="title" name="title" required maxlength="200"
+                           class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                </div>
+                <div>
+                    <label for="description" class="block text-sm font-medium text-slate-700">Description</label>
+                    <textarea id="description" name="description" rows="3" maxlength="4000"
+                              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="requiredSkills" class="block text-sm font-medium text-slate-700">Required skills</label>
+                        <input id="requiredSkills" name="requiredSkills" placeholder="Java, Python"
+                               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                    </div>
+                    <div>
+                        <label for="preferredSkills" class="block text-sm font-medium text-slate-700">Preferred skills</label>
+                        <input id="preferredSkills" name="preferredSkills" placeholder="NLP"
+                               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="hoursPerWeek" class="block text-sm font-medium text-slate-700">Hours / week</label>
+                        <input id="hoursPerWeek" name="hoursPerWeek" type="number" min="1" max="168"
+                               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                    </div>
+                    <div>
+                        <label for="maxApplicants" class="block text-sm font-medium text-slate-700">Max applicants</label>
+                        <input id="maxApplicants" name="maxApplicants" type="number" min="1"
+                               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="compensationType" class="block text-sm font-medium text-slate-700">Compensation</label>
+                        <select id="compensationType" name="compensationType"
+                                class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option th:each="c : ${compensationTypes}" th:value="${c}" th:text="${c}"></option>
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <label class="flex items-center gap-2 text-sm text-slate-700">
+                            <input type="checkbox" name="beginnerFriendly" value="true"
+                                   class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"/>
+                            Beginner friendly
+                        </label>
+                    </div>
+                </div>
+                <div class="flex justify-end">
+                    <button type="submit"
+                            class="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                        Publish opportunity
+                    </button>
+                </div>
+            </form>
+            <p th:if="${currentFaculty == null}" class="text-sm text-slate-400 mt-3">Cannot publish without a faculty profile.</p>
+
+            <!-- Existing opportunities -->
+            <div class="mt-6">
+                <h3 class="text-sm font-medium text-slate-700 mb-2">Your opportunities</h3>
+                <p th:if="${#lists.isEmpty(opportunities)}"
+                   class="text-sm text-slate-400 rounded-lg border border-dashed border-slate-300 p-4 text-center">
+                    No opportunities posted yet.
+                </p>
+                <ul th:unless="${#lists.isEmpty(opportunities)}" class="divide-y divide-slate-100">
+                    <li th:each="op : ${opportunities}" class="py-2">
+                        <div class="flex items-center justify-between">
+                            <span class="font-medium text-sm" th:text="${op.title}">Title</span>
+                            <span class="text-xs text-slate-400"
+                                  th:text="(${op.compensationType} ?: '') + ' · ' + (${op.hoursPerWeek} ?: '—') + 'h/wk'"></span>
+                        </div>
+                        <p class="text-xs text-slate-500" th:text="${op.description}">Description</p>
+                    </li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Candidate search -->
+        <section class="rounded-xl border border-slate-200 bg-white p-6">
+            <div class="flex items-center justify-between gap-2">
+                <h2 class="text-lg font-semibold">Opt-in candidates</h2>
+                <span class="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700">Privacy-filtered</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">Only students who opted in are shown.</p>
+
+            <div th:if="${candidateError}" class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                <span th:text="${candidateError}">error</span>
+            </div>
+
+            <p th:if="${#lists.isEmpty(candidates) and candidateError == null}"
+               class="mt-3 text-sm text-slate-400 rounded-lg border border-dashed border-slate-300 p-4 text-center">
+                No opted-in candidates right now.
+            </p>
+
+            <ul class="mt-3 space-y-2">
+                <li th:each="c : ${candidates}" class="rounded-lg border border-slate-200 p-3">
+                    <div class="flex items-center justify-between">
+                        <span class="font-medium text-sm" th:text="${c.name}">Student</span>
+                        <span class="text-xs text-slate-400" th:text="${c.major} ?: ''">major</span>
+                    </div>
+                    <div class="text-xs text-slate-500 mt-1">
+                        <span th:text="'Year ' + (${c.academicYear} ?: '—')"></span> ·
+                        <span th:text="(${c.hoursPerWeek} ?: '—') + ' h/wk'"></span>
+                    </div>
+                    <div class="flex flex-wrap gap-1 mt-1" th:if="${c.verifiedSkills != null and !c.verifiedSkills.isEmpty()}">
+                        <span th:each="sk : ${c.verifiedSkills}"
+                              class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600" th:text="${sk}">skill</span>
+                    </div>
+                </li>
+            </ul>
+        </section>
+    </div>
+
+    <!-- Pipeline board -->
+    <section class="rounded-xl border border-slate-200 bg-white p-6">
+        <h2 class="text-lg font-semibold mb-1">Recruitment pipeline</h2>
+        <p class="text-sm text-slate-500 mb-4">Move applications through the hiring stages.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div th:each="column : ${board}" class="rounded-lg bg-slate-50 border border-slate-200 p-3 min-h-[8rem]">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500" th:text="${column.key}">STAGE</h3>
+                    <span class="rounded-full bg-white border border-slate-200 px-2 text-xs text-slate-500"
+                          th:text="${#lists.size(column.value)}">0</span>
+                </div>
+                <p th:if="${#lists.isEmpty(column.value)}" class="text-xs text-slate-400 text-center py-4">Empty</p>
+                <ul class="space-y-2">
+                    <li th:each="app : ${column.value}" class="rounded-lg bg-white border border-slate-200 p-2">
+                        <div class="text-xs text-slate-500" th:text="'Application #' + ${app.id}">#</div>
+                        <div class="text-xs text-slate-400" th:text="'Student ' + ${app.studentId}">student</div>
+                        <div class="mt-2 flex flex-wrap gap-1">
+                            <form th:if="${app.status.name() == 'NEW'}" th:action="@{'/applications/' + ${app.id} + '/transition'}" method="post">
+                                <input type="hidden" name="action" value="shortlist"/>
+                                <button class="rounded bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 hover:bg-indigo-100">Shortlist</button>
+                            </form>
+                            <form th:if="${app.status.name() == 'SHORTLISTED'}" th:action="@{'/applications/' + ${app.id} + '/transition'}" method="post">
+                                <input type="hidden" name="action" value="interview"/>
+                                <button class="rounded bg-sky-50 px-2 py-0.5 text-xs text-sky-700 hover:bg-sky-100">Interview</button>
+                            </form>
+                            <form th:if="${app.status.name() == 'INTERVIEW'}" th:action="@{'/applications/' + ${app.id} + '/transition'}" method="post">
+                                <input type="hidden" name="action" value="accept"/>
+                                <button class="rounded bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-100">Accept</button>
+                            </form>
+                            <form th:if="${app.status.name() == 'NEW' or app.status.name() == 'SHORTLISTED' or app.status.name() == 'INTERVIEW'}"
+                                  th:action="@{'/applications/' + ${app.id} + '/transition'}" method="post">
+                                <input type="hidden" name="action" value="reject"/>
+                                <button class="rounded bg-rose-50 px-2 py-0.5 text-xs text-rose-700 hover:bg-rose-100">Reject</button>
+                            </form>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </section>
+</main>
+
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>
