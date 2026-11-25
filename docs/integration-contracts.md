@@ -385,6 +385,7 @@ StudentProfile getStudent(Long);                         // ResourceNotFoundExce
 StudentProfile saveStudent(StudentProfile);              // InvalidRequest / DuplicateEntity
 // skills
 List<SkillEvidence> importSkills(Long studentId, String source, String handle);
+    // sample-data rows: verifiedByStudent = false, never added to StudentProfile.verifiedSkills
 List<SkillEvidence> evidenceFor(Long studentId);
 // opportunities
 Opportunity getOpportunity(Long);
