@@ -75,7 +75,24 @@ fix a compile error. Report it instead.
    `pipeline/`, orchestration in `controllers/`.
 6. `controllers/` may import `matching/`, `pipeline/`, `adapters/`, `models/`, `repository/`, `config/`.
    `matching/`, `pipeline/`, `adapters/`, `factory/` must **never** import `controllers/`.
-7. Keep commits scoped to your folder; one task per PR.
+7. **Commit incrementally as you work — do not batch a whole task into one final commit.** After each
+   complete, verified step (a merge, a passing test suite, a coverage milestone, a tooling change, …), make
+   a small, scoped commit so no progress is ever lost. Each commit should leave the build green; never
+   commit secrets, and do not push unless asked. One task per PR.
+8. **Use Conventional Commits for the message subject:** `<type>[scope]: <subject>`, optionally followed by a
+   body and footer(s):
+
+   ```
+   <type>[scope]: <subject>
+
+   [optional body]
+
+   [optional footer(s)]
+   ```
+
+   Common `<type>`s: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `build`, `ci`. Keep the subject
+   imperative and under ~72 characters; use the body for *why*, and footers for things like
+   `Co-authored-by:` or `Refs:`.
 
 ---
 
