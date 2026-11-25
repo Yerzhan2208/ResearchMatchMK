@@ -22,14 +22,14 @@ CI (`.github/workflows/ci.yml`) runs `mvn clean test jacoco:report` on every pus
 After running the tests, view coverage without parsing Maven output:
 
 ```bash
-scripts/coverage.sh              # overall line/branch % + per-class gap table (last run)
+scripts/coverage.sh              # overall line/branch % + per-class gap table (auto-runs tests if no report)
 scripts/coverage.sh --run --html # run tests, then write target/site/jacoco-dashboard.html
 scripts/coverage.sh --open       # open the JaCoCo HTML report in a browser
 ```
 
-On Windows use `scripts\coverage.bat`. The tool wraps `scripts/coverage.py` (Python 3, no extra deps) and
-flags any class still missing tests. Project policy: **100% line coverage**, **≥ 85% branch** (see
-[`AGENTS.md`](AGENTS.md) §5).
+On Windows use `scripts\coverage.bat`. The tool wraps `scripts/coverage.py` (Python 3, no extra deps),
+works from any directory, and flags any class still missing tests. Project policy: **100% line coverage**,
+**≥ 85% branch** (see [`AGENTS.md`](AGENTS.md) §5).
 
 ## Agent notes
 

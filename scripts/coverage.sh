@@ -6,4 +6,6 @@
 #   scripts/coverage.sh --open        # open the JaCoCo HTML report
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Always run from the project root (the parent of scripts/) so relative report paths resolve.
+cd "$DIR/.."
 exec python3 "$DIR/coverage.py" "$@"

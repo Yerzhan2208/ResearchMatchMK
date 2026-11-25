@@ -132,11 +132,16 @@ New, dependency-free helpers (no Maven/app changes):
 - `scripts/coverage.py` — parses `target/site/jacoco/jacoco.csv`, prints a terminal summary (overall %
   with PASS/FAIL badges, per-class table sorted by uncovered lines/branches), and can:
   - `--run` run `mvn clean test jacoco:report` first;
+  - auto-generate the report if it is missing (use `--no-run-first` to fail instead);
   - `--open` open the JaCoCo HTML report;
-  - `--html` write a self-contained `target/site/jacoco-dashboard.html`;
-  - `--class <substr>` focus one class;
+  - `--html` write a self-contained `target/site/jacoco-dashboard.html` (honours `--class`);
+  - `--class <substr>` focus the terminal table and dashboard on matching classes;
   - `--fail-line N` / `--fail-branch N` exit non-zero below a threshold (usable later in CI).
-- `scripts/coverage.sh` / `scripts/coverage.bat` — cross-platform wrappers.
+- `scripts/coverage.sh` / `scripts/coverage.bat` — cross-platform wrappers that `cd` to the project root,
+  so they work from any directory. The Python entry point also resolves all paths from the project root.
+
+> Fixed after review: on a clean tree the report does not exist yet, so the tool now runs the tests
+> automatically instead of exiting; the wrappers previously failed when invoked from a subdirectory.
 
 When new functionality is added, just run the suite and open the dashboard: classes with uncovered
 lines/branches are flagged `gap`, so it is obvious where tests are still needed. The built-in

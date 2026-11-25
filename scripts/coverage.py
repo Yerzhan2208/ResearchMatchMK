@@ -32,10 +32,13 @@ import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 
-REPORT_DIR = Path("target/site/jacoco")
+# Resolve everything relative to the project root (the parent of this script's folder) so the tool
+# works no matter which directory it is invoked from.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+REPORT_DIR = PROJECT_ROOT / "target/site/jacoco"
 CSV_PATH = REPORT_DIR / "jacoco.csv"
 HTML_INDEX = REPORT_DIR / "index.html"
-DASHBOARD_PATH = Path("target/site/jacoco-dashboard.html")
+DASHBOARD_PATH = PROJECT_ROOT / "target/site/jacoco-dashboard.html"
 
 LINE_GOAL = 100.0          # project policy: 100% line coverage
 BRANCH_GATE = 85.0         # project policy: >= 85% branch coverage (mvn verify gate)
@@ -73,7 +76,7 @@ class ClassCoverage:
 
 def run_maven() -> None:
     print("Running: mvn -q clean test jacoco:report ...")
-    result = subprocess.run(["mvn", "-q", "clean", "test", "jacoco:report"])
+    result = subprocess.run(["mvn", "-q", "clean", "test", "jacoco:report"], cwd=PROJECT_ROOT)
     if result.returncode != 0:
         print("Maven build FAILED (tests or compilation). Aborting.", file=sys.stderr)
         sys.exit(result.returncode)
@@ -153,17 +156,23 @@ def print_summary(rows: list[ClassCoverage], t: dict[str, float], name_filter: s
         print(f"  {r.name:32} {line:>10} {branch:>10}{mark}")
 
     if not any_gap:
-        print("  All classes fully covered.")
+        if name_filter is not None:
+            print(f"  No uncovered classes match '{name_filter}'.")
+        elif shown:
+            print("  All classes fully covered.")
+        else:
+            print("  No classes to report.")
     print("=" * 68)
     print(f"  HTML report: {HTML_INDEX}   (open with --open, or write a dashboard with --html)")
     print("=" * 68)
     print()
 
 
-def write_dashboard(rows: list[ClassCoverage], t: dict[str, float]) -> None:
+def write_dashboard(rows: list[ClassCoverage], t: dict[str, float], name_filter: str | None = None) -> None:
     line_ok = t["line_pct"] >= LINE_GOAL
     branch_ok = t["branch_pct"] >= BRANCH_GATE
-    rows_sorted = sorted(rows, key=lambda r: (-r.uncovered, r.name))
+    selected = [r for r in rows if name_filter is None or name_filter.lower() in r.name.lower()]
+    rows_sorted = sorted(selected, key=lambda r: (-r.uncovered, r.name))
 
     def row_html(r: ClassCoverage) -> str:
         cls = "good" if r.line_pct >= LINE_GOAL else ("warn" if r.line_pct >= 90 else "bad")
@@ -218,6 +227,8 @@ def write_dashboard(rows: list[ClassCoverage], t: dict[str, float]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="ResearchMatch JaCoCo coverage dashboard")
     parser.add_argument("--run", action="store_true", help="run `mvn clean test jacoco:report` first")
+    parser.add_argument("--no-run-first", dest="no_run_first", action="store_true",
+                        help="do not auto-generate the report when it is missing (just fail)")
     parser.add_argument("--open", action="store_true", help="open the JaCoCo HTML report in a browser")
     parser.add_argument("--html", action="store_true", help="write a self-contained HTML dashboard")
     parser.add_argument("--class", dest="name_filter", default=None,
@@ -230,13 +241,18 @@ def main() -> int:
 
     if args.run:
         run_maven()
+    elif not CSV_PATH.exists() and not args.no_run_first:
+        # Convenience: on a clean checkout there is no report yet, so generate it instead of failing.
+        print(f"No JaCoCo report yet at {CSV_PATH}; running the tests to generate it "
+              f"(use --no-run-first to disable).", file=sys.stderr)
+        run_maven()
 
     rows = load(CSV_PATH)
     t = totals(rows)
     print_summary(rows, t, args.name_filter)
 
     if args.html:
-        write_dashboard(rows, t)
+        write_dashboard(rows, t, args.name_filter)
     if args.open:
         if HTML_INDEX.exists():
             webbrowser.open(HTML_INDEX.resolve().as_uri())
