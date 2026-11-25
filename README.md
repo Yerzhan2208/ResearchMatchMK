@@ -31,6 +31,11 @@ On Windows use `scripts\coverage.bat`. The tool wraps `scripts/coverage.py` (Pyt
 works from any directory, and flags any class still missing tests. Project policy: **100% line coverage**,
 **≥ 85% branch** (see [`AGENTS.md`](AGENTS.md) §5).
 
+> **JDK 17 required.** The project targets Java 17; Mockito's inline mock maker fails on newer JDKs
+> (e.g. 21/27) with `Could not modify all classes`. `scripts/coverage.sh` auto-selects a JDK 17 (an
+> existing `JAVA_HOME`, or macOS `/usr/libexec/java_home -v 17`) and gives a clear message if none is
+> found. If you run `mvn` yourself, set `JAVA_HOME` to a JDK 17 first.
+
 ## Agent notes
 
 Session hand-off notes (what was done, decisions, follow-ups) live in [`agent-notes/`](agent-notes/).

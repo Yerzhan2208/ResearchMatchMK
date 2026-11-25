@@ -74,12 +74,141 @@ class ClassCoverage:
         return self.line_missed + self.branch_missed
 
 
+def _java_major_version(java_home: Path) -> int | None:
+    """Return the major Java version reported by ``<java_home>/bin/java -version`` (e.g. 17), else None."""
+    java = java_home / "bin" / ("java.exe" if os.name == "nt" else "java")
+    if not java.exists():
+        return None
+    try:
+        out = subprocess.run([str(java), "-version"], capture_output=True, text=True)
+    except OSError:
+        return None
+    # Version line goes to stderr, e.g. openjdk version "17.0.16" or "17.0.16"
+    text = (out.stderr or "") + (out.stdout or "")
+    marker = 'version "'
+    idx = text.find(marker)
+    if idx < 0:
+        return None
+    start = idx + len(marker)
+    end = text.find('"', start)
+    if end < 0:
+        return None
+    raw = text[start:end]
+    # Trim suffixes such as "1.8.0_292" -> 8, "17.0.16-ea" -> 17
+    if raw.startswith("1."):
+        raw = raw[2:]
+    lead = raw.split(".")[0].split("-")[0].split("+")[0]
+    try:
+        return int(lead)
+    except ValueError:
+        return None
+
+
+def _current_maven_java_major() -> int | None:
+    """Return the Java major version Maven would currently use (from ``mvn -v``), else None."""
+    try:
+        out = subprocess.run(["mvn", "-v"], capture_output=True, text=True, cwd=PROJECT_ROOT)
+    except OSError:
+        return None
+    for line in ((out.stdout or "") + (out.stderr or "")).splitlines():
+        line = line.strip()
+        if line.lower().startswith("java version:"):
+            raw = line.split(":", 1)[1].strip()
+            if raw.startswith("1."):
+                raw = raw[2:]
+            lead = raw.split(".")[0].split("-")[0].split("+")[0]
+            try:
+                return int(lead)
+            except ValueError:
+                return None
+    return None
+
+
+def _macos_java_home() -> Path | None:
+    """On macOS use the OS tool to find a JDK 17 without hardcoding a vendor path."""
+    tool = Path("/usr/libexec/java_home")
+    if not tool.exists():
+        return None
+    try:
+        out = subprocess.run([str(tool), "-v", "17"], capture_output=True, text=True)
+    except OSError:
+        return None
+    if out.returncode != 0:
+        return None
+    path = (out.stdout or "").strip()
+    return Path(path) if path else None
+
+
+def resolve_java_home() -> Path | None:
+    """Find a JDK 17 (no hardcoded vendor paths), for use by the Maven subprocess.
+
+    Order: explicit ``JAVA_HOME`` (if 17) -> macOS ``java_home -v 17`` -> ``JAVA_HOME`` on ``PATH`` if 17.
+    Returns None when no JDK 17 can be located, so the caller can print a clear, actionable message.
+    """
+    env_home = os.environ.get("JAVA_HOME")
+    if env_home:
+        candidate = Path(env_home)
+        if _java_major_version(candidate) == 17:
+            return candidate
+
+    mac = _macos_java_home()
+    if mac is not None and _java_major_version(mac) == 17:
+        return mac
+
+    return None
+
+
+def _mockito_jdk_hint(output: str) -> str | None:
+    """If the output shows the Mockito inline-mock failure, return a JDK-17 guidance string."""
+    o = output or ""
+    if ("Could not modify all classes" in o or "inline mocks" in o
+            or ("MockitoException" in o and "Mockito" in o)):
+        return ("The test run failed because Mockito cannot instrument classes under a non-17 JDK "
+                "(inline mock maker is unsupported on newer JVMs).\n"
+                "This project targets JDK 17. Install a JDK 17 and set JAVA_HOME to it, e.g.:\n"
+                "    macOS :  export JAVA_HOME=$(/usr/libexec/java_home -v 17)\n"
+                "    Linux :  export JAVA_HOME=/path/to/jdk-17\n"
+                "    Windows:  set JAVA_HOME=C:\\path\\to\\jdk-17")
+    return None
+
+
 def run_maven() -> None:
+    """Run the test + JaCoCo goal, ensuring Maven uses a JDK 17 (the project's target)."""
+    env = dict(os.environ)
+    jdk = resolve_java_home()
+
+    maven_major = _current_maven_java_major()
+    if jdk is not None:
+        env["JAVA_HOME"] = str(jdk)
+        print(f"Using JDK 17: {jdk}")
+    elif maven_major == 17:
+        print("Using JDK 17: (already active in Maven)")
+    else:
+        print(
+            "ERROR: no JDK 17 found and Maven is not already running on JDK 17 "
+            f"(Maven JDK: {maven_major if maven_major is not None else 'unknown'}).\n"
+            "This project requires JDK 17. Install a JDK 17 and set JAVA_HOME, e.g.:\n"
+            "    macOS :  export JAVA_HOME=$(/usr/libexec/java_home -v 17)\n"
+            "    Linux :  export JAVA_HOME=/path/to/jdk-17\n"
+            "    Windows:  set JAVA_HOME=C:\\path\\to\\jdk-17",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
     print("Running: mvn -q clean test jacoco:report ...")
-    result = subprocess.run(["mvn", "-q", "clean", "test", "jacoco:report"], cwd=PROJECT_ROOT)
+    result = subprocess.run(["mvn", "-q", "clean", "test", "jacoco:report"],
+                            cwd=PROJECT_ROOT, env=env, capture_output=True, text=True)
     if result.returncode != 0:
+        # Surface normal Maven output for context, then a targeted hint if it looks like the JDK issue.
+        combined = (result.stdout or "") + (result.stderr or "")
+        sys.stderr.write(combined)
+        hint = _mockito_jdk_hint(combined)
+        if hint:
+            print("\n" + hint, file=sys.stderr)
         print("Maven build FAILED (tests or compilation). Aborting.", file=sys.stderr)
         sys.exit(result.returncode)
+    if result.stdout:
+        sys.stdout.write(result.stdout)
 
 
 def load(csv_path: Path) -> list[ClassCoverage]:

@@ -143,6 +143,14 @@ New, dependency-free helpers (no Maven/app changes):
 > Fixed after review: on a clean tree the report does not exist yet, so the tool now runs the tests
 > automatically instead of exiting; the wrappers previously failed when invoked from a subdirectory.
 
+> **JDK 17 is required (fixed another failure after review).** The project targets Java 17, but Maven on
+> this machine resolved to JDK 27 (Homebrew) when `JAVA_HOME` was unset, and Mockito's inline mock maker
+> then failed with `Could not modify all classes … ApplicationSubject` (161 test errors). `run_maven()` now
+> resolves a JDK 17 without hardcoded vendor paths (`JAVA_HOME` if 17 → macOS `/usr/libexec/java_home -v 17`),
+> passes it to Maven via `JAVA_HOME`, prints `Using JDK 17: <path>`, and when no 17 is found prints an
+> actionable message (macOS/Linux/Windows `JAVA_HOME` hints) instead of the raw Mockito stack trace. If the
+> run still fails with the inline-mock signature, the script detects it and repeats the JDK-17 guidance.
+
 When new functionality is added, just run the suite and open the dashboard: classes with uncovered
 lines/branches are flagged `gap`, so it is obvious where tests are still needed. The built-in
 `target/site/jacoco/index.html` remains the line-by-line source view.
