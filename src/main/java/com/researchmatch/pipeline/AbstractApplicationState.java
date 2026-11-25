@@ -13,27 +13,27 @@ abstract class AbstractApplicationState implements ApplicationState {
 
     @Override
     public ApplicationState shortlist() {
-        return deny("shortlist");
+        throw deny("shortlist");
     }
 
     @Override
     public ApplicationState interview() {
-        return deny("interview");
+        throw deny("interview");
     }
 
     @Override
     public ApplicationState accept() {
-        return deny("accept");
+        throw deny("accept");
     }
 
     @Override
     public ApplicationState reject() {
-        return deny("reject");
+        throw deny("reject");
     }
 
-    /** Always throws: this state does not allow the transition. */
-    protected ApplicationState deny(String transition) {
-        throw new IllegalStateTransitionException(
+    /** Builds the exception for a disallowed transition; callers {@code throw} it, so the path is coverable. */
+    protected IllegalStateTransitionException deny(String transition) {
+        return new IllegalStateTransitionException(
                 "Cannot " + transition + " an application currently " + status());
     }
 
