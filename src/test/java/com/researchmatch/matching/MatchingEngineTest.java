@@ -166,4 +166,147 @@ class MatchingEngineTest {
         assertThat(sharedScore).isGreaterThan(defaultScore);
         assertThat(defaultScore).isBetween(0.0, 0.30);
     }
+
+    // ---------------------------------------------------------------- rankOpportunities
+
+    private MatchingEngine engineWithAllStrategies() {
+        return new MatchingEngine(students, opportunities, SystemConfigManager.getInstance(),
+                List.of(new BalancedMatchStrategy(), new BeginnerFriendlyStrategy(), new SkillStrictStrategy()));
+    }
+
+    private static Opportunity opportunity(long id, boolean beginnerFriendly, Set<String> required, double noScore) {
+        Opportunity opportunity = new Opportunity();
+        opportunity.setId(id);
+        opportunity.setFacultyId(9L);
+        opportunity.setTitle("Java spring research " + id);
+        opportunity.setDescription("java spring");
+        opportunity.setBeginnerFriendly(beginnerFriendly);
+        opportunity.setHoursPerWeek(5);
+        opportunity.setMinAcademicYear(1);
+        opportunity.setRequiredSkills(required);
+        return opportunity;
+    }
+
+    @Test
+    void rankOpportunitiesRejectsNullStudentId() {
+        assertThatThrownBy(() -> engineWithAllStrategies().rankOpportunities(null, "balanced"))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    void rankOpportunitiesThrowsWhenStudentMissing() {
+        when(students.findById(1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> engineWithAllStrategies().rankOpportunities(1L, "balanced"))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Student 1");
+    }
+
+    @Test
+    void rankOpportunitiesRejectsUnknownStrategy() {
+        when(students.findById(1L)).thenReturn(Optional.of(eligibleStudent()));
+
+        assertThatThrownBy(() -> engineWithAllStrategies().rankOpportunities(1L, "nonsense"))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    void rankOpportunitiesReturnsEmptyWhenNoOpportunities() {
+        when(students.findById(1L)).thenReturn(Optional.of(eligibleStudent()));
+        when(opportunities.findAll()).thenReturn(List.of());
+
+        assertThat(engineWithAllStrategies().rankOpportunities(1L, "balanced")).isEmpty();
+    }
+
+    @Test
+    void rankOpportunitiesBalancedConsidersAllOpportunities() {
+        when(students.findById(1L)).thenReturn(Optional.of(eligibleStudent()));
+        when(opportunities.findAll()).thenReturn(List.of(
+                opportunity(10L, false, Set.of(), 0),
+                opportunity(20L, true, Set.of(), 0)));
+
+        List<MatchResult> ranked = engineWithAllStrategies().rankOpportunities(1L, "balanced");
+
+        assertThat(ranked).extracting(MatchResult::getOpportunityId).containsExactlyInAnyOrder(10L, 20L);
+    }
+
+    @Test
+    void rankOpportunitiesSkillStrictConsidersAllOpportunities() {
+        when(students.findById(1L)).thenReturn(Optional.of(eligibleStudent()));
+        when(opportunities.findAll()).thenReturn(List.of(
+                opportunity(10L, false, Set.of(), 0),
+                opportunity(20L, true, Set.of(), 0)));
+
+        List<MatchResult> ranked = engineWithAllStrategies().rankOpportunities(1L, "skill-strict");
+
+        assertThat(ranked).extracting(MatchResult::getOpportunityId).containsExactlyInAnyOrder(10L, 20L);
+    }
+
+    @Test
+    void rankOpportunitiesBeginnerFriendlyOnlyConsidersBeginnerOpportunities() {
+        when(students.findById(1L)).thenReturn(Optional.of(eligibleStudent()));
+        Opportunity beginner = opportunity(20L, true, Set.of(), 0);
+        when(opportunities.findByBeginnerFriendlyTrue()).thenReturn(List.of(beginner));
+
+        List<MatchResult> ranked = engineWithAllStrategies().rankOpportunities(1L, "beginner-friendly");
+
+        assertThat(ranked).extracting(MatchResult::getOpportunityId).containsExactly(20L);
+        Mockito.verify(opportunities).findByBeginnerFriendlyTrue();
+        Mockito.verify(opportunities, Mockito.never()).findAll();
+    }
+
+    @Test
+    void rankOpportunitiesDefaultsToBalancedForNullAndBlank() {
+        when(students.findById(1L)).thenReturn(Optional.of(eligibleStudent()));
+        when(opportunities.findAll()).thenReturn(List.of(
+                opportunity(20L, false, Set.of(), 0),
+                opportunity(10L, false, Set.of(), 0)));
+
+        List<MatchResult> explicit = engineWithAllStrategies().rankOpportunities(1L, "balanced");
+        List<MatchResult> nullName = engineWithAllStrategies().rankOpportunities(1L, null);
+        List<MatchResult> blankName = engineWithAllStrategies().rankOpportunities(1L, "   ");
+
+        List<Long> explicitOrder = explicit.stream().map(MatchResult::getOpportunityId).toList();
+        assertThat(explicitOrder).isNotEmpty();
+        assertThat(nullName.stream().map(MatchResult::getOpportunityId).toList()).isEqualTo(explicitOrder);
+        assertThat(blankName.stream().map(MatchResult::getOpportunityId).toList()).isEqualTo(explicitOrder);
+    }
+
+    @Test
+    void rankOpportunitiesExcludesIneligibleResults() {
+        // Student is in year 1; only the opportunity requiring year 3 is ineligible.
+        StudentProfile student = eligibleStudent();
+        student.setAcademicYear(1);
+        when(students.findById(1L)).thenReturn(Optional.of(student));
+
+        Opportunity eligible = opportunity(10L, true, Set.of(), 0);
+        eligible.setMinAcademicYear(1);
+        Opportunity ineligible = opportunity(20L, true, Set.of(), 0);
+        ineligible.setMinAcademicYear(3);
+        when(opportunities.findAll()).thenReturn(List.of(eligible, ineligible));
+
+        List<MatchResult> ranked = engineWithAllStrategies().rankOpportunities(1L, "balanced");
+
+        assertThat(ranked).extracting(MatchResult::getOpportunityId).containsExactly(10L);
+        assertThat(ranked).allMatch(MatchResult::isEligible);
+    }
+
+    @Test
+    void rankOpportunitiesRespectsMaxResults() {
+        when(students.findById(1L)).thenReturn(Optional.of(eligibleStudent()));
+        when(opportunities.findAll()).thenReturn(List.of(
+                opportunity(1L, false, Set.of(), 0),
+                opportunity(2L, false, Set.of(), 0),
+                opportunity(3L, false, Set.of(), 0)));
+
+        SystemConfigManager cappedConfig = Mockito.mock(SystemConfigManager.class);
+        when(cappedConfig.getInt(eq(SystemConfigManager.KEY_MAX_MATCH_RESULTS), org.mockito.ArgumentMatchers.anyInt()))
+                .thenReturn(2);
+        MatchingEngine capped = new MatchingEngine(students, opportunities, cappedConfig,
+                List.of(new BalancedMatchStrategy(), new BeginnerFriendlyStrategy(), new SkillStrictStrategy()));
+
+        List<MatchResult> ranked = capped.rankOpportunities(1L, "balanced");
+
+        assertThat(ranked).hasSize(2);
+    }
 }

@@ -85,14 +85,11 @@ class MatchingContractsTest {
     }
 
     @Test
-    void enginePlaceholdersAreExplicitTodos() {
+    void rankOpportunitiesRejectsNullStudentId() {
         MatchingEngine engine = engine(List.of(BALANCED));
-        MatchContext context = engine.newContext(new StudentProfile(), new Opportunity());
 
-        assertThatThrownBy(() -> engine.rankOpportunities(1L, null))
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessageContaining("rankOpportunities");
-        assertThat(context).isNotNull();
+        assertThatThrownBy(() -> engine.rankOpportunities(null, BalancedMatchStrategy.NAME))
+                .isInstanceOf(InvalidRequestException.class);
     }
 
     @Test
