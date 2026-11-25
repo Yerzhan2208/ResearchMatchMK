@@ -6,7 +6,8 @@ package com.researchmatch.adapters;
  * @param skillName       normalised skill or research area, e.g. {@code "Java"} or {@code "NLP"}
  * @param sourceName      repository or paper used as evidence
  * @param evidenceSnippet short human-readable justification; may be null
- * @param confidence      0.0–1.0 strength of the signal (TODO (Member 3): define how it is computed)
+ * @param confidence      0.0–1.0 strength of the signal: adapters report the fraction of the author's
+ *                        repositories / works that exhibit the skill or area
  */
 public record ImportedEvidence(String skillName, String sourceName, String evidenceSnippet, double confidence) {
 

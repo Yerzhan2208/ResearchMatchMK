@@ -6,10 +6,18 @@ import org.springframework.stereotype.Component;
 /**
  * Initial state: a freshly submitted application. Allowed: SHORTLISTED, REJECTED.
  *
- * <p>TODO (Member 3): implement the allowed transitions; leave {@code super.*()} for rejected ones.
+ * <p>SHORTLISTED and INTERVIEW are rejected through {@link AbstractApplicationState}'s deny-by-default.
  */
 @Component
 public class NewState extends AbstractApplicationState {
+
+    private final ShortlistedState shortlisted;
+    private final RejectedState rejected;
+
+    public NewState(ShortlistedState shortlisted, RejectedState rejected) {
+        this.shortlisted = shortlisted;
+        this.rejected = rejected;
+    }
 
     @Override
     public Application.Status status() {
@@ -18,16 +26,16 @@ public class NewState extends AbstractApplicationState {
 
     @Override
     public ApplicationState shortlist() {
-        throw new UnsupportedOperationException("TODO (Member 3): NewState.shortlist");
+        return shortlisted;
     }
 
     @Override
     public ApplicationState reject() {
-        throw new UnsupportedOperationException("TODO (Member 3): NewState.reject");
+        return rejected;
     }
 
     @Override
     public String describe() {
-        throw new UnsupportedOperationException("TODO (Member 3): NewState.describe");
+        return "Application is new and waiting for the faculty to review it.";
     }
 }
