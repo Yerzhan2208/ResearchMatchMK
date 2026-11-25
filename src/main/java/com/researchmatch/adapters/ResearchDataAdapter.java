@@ -21,9 +21,9 @@ public interface ResearchDataAdapter {
      *
      * @param handle never blank
      * @return never null, possibly empty; never contains null elements
-     * @throws InvalidRequestException  if {@code handle} is blank
-     * @throws ResearchMatchException   if the upstream payload cannot be interpreted
-     *                                  (TODO (Member 3): define a dedicated subtype if needed)
+     * @throws InvalidRequestException  if {@code handle} is blank (or malformed for the platform)
+     * @throws ResearchMatchException   if the upstream payload cannot be interpreted; implementations that
+     *                                  work offline never raise this
      */
     List<ImportedEvidence> importEvidence(String handle);
 }
