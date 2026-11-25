@@ -200,8 +200,8 @@ public interface RankingStrategy {
 
 ```java
 MatchingEngine(StudentRepository, OpportunityRepository, SystemConfigManager, List<RankingStrategy>);
-MatchResult evaluate(Long studentId, Long opportunityId);
-List<MatchResult> rankOpportunities(Long studentId, String strategyName);
+MatchResult evaluate(Long studentId, Long opportunityId);        // ← IMPLEMENTED
+List<MatchResult> rankOpportunities(Long studentId, String strategyName);   // ← IMPLEMENTED
 RankingStrategy strategy(String strategyName);        // ← IMPLEMENTED (null/blank ⇒ balanced)
 // accessors: getStudentRepository(), getOpportunityRepository(), getConfig(); protected newContext(...)
 ```
