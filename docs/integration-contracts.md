@@ -241,12 +241,27 @@ new OpportunityBuilder()
 
 ```java
 public interface ResearchDataAdapter {
+    String OFFLINE_SNIPPET_PREFIX = "Offline fixture (sample data, not fetched): ";
     String platformName();                              // "github", "openalex"
     List<ImportedEvidence> importEvidence(String handle); // never null; empty ⇒ nothing found
 }
 public record ImportedEvidence(String skillName, String sourceName, String evidenceSnippet, double confidence)
         // skillName non-blank, confidence ∈ [0,1], else IllegalArgumentException
 ```
+
+**Offline mode (no token / OpenAlex disabled).** Both adapters answer only for a small curated fixture map of
+known handles; **every other handle yields an empty list**, which the interface already defines as "nothing
+found". No evidence is ever derived from the handle's spelling or hash.
+
+Offline results are labelled as sample data: `sourceName` is prefixed with `FIXTURE_SOURCE_PREFIX`
+(`fixture:`), `evidenceSnippet` with `OFFLINE_SNIPPET_PREFIX`, and `ImportedEvidence#isSampleData()` reports
+it. The facade persists these rows as evidence; see §6 for how they are treated as verified skills.
+
+The fixture keys are the handles the demo actually uses: the seeded students (`demo-mei-ling-ho`,
+`demo-arjun-patel`, `demo-sze-wing-lau`) and the seeded faculty OpenAlex id (`A2RRCMK3ZDBF7`, Prof. Wei Chan,
+whose fixture areas mirror `DataSeeder`). So "Import from GitHub / OpenAlex" works on a fresh checkout with
+no token, and the data is visibly marked fictional. `octocat` is kept because it is a real account whose
+sample reads correctly; the fixture ids are otherwise ours, not real OpenAlex records.
 
 Lookup (used by the facade): `ResearchDataSourceRegistry` (interface) + `AdapterRegistry` (bean).
 

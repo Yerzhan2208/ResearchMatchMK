@@ -39,11 +39,19 @@ class AdaptersTest {
     @Test
     void adaptersImportWithoutNetworkAndRejectBlankHandles() {
         List<ImportedEvidence> github = new GitHubSkillAdapter("  ", null).importEvidence("octocat");
-        assertThat(github).isNotEmpty();
+        assertThat(github).isNotEmpty().allSatisfy(e -> assertThat(e.isSampleData()).isTrue());
 
         OpenAlexPublicationAdapter openAlex = new OpenAlexPublicationAdapter(false, null, null);
         assertThatThrownBy(() -> openAlex.importEvidence("  "))
                 .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    void importedEvidenceKnowsWhetherItIsSampleData() {
+        assertThat(new ImportedEvidence("Java", "octocat/repo", "snippet", 0.5).isSampleData()).isFalse();
+        assertThat(new ImportedEvidence("Java", ResearchDataAdapter.FIXTURE_SOURCE_PREFIX + "octocat/repo",
+                "snippet", 0.5).isSampleData()).isTrue();
+        assertThat(new ImportedEvidence("Java", null, null, 0.5).isSampleData()).isFalse();
     }
 
     @Test

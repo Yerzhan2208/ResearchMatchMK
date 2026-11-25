@@ -52,25 +52,57 @@ class GitHubSkillAdapterTest {
             List<ImportedEvidence> first = adapter.importEvidence("octocat");
             List<ImportedEvidence> second = adapter.importEvidence("octocat");
 
-            assertThat(first).isEqualTo(second);
+            assertThat(first).isNotEmpty().isEqualTo(second);
         }
 
         @Test
         void neverReturnsNullOrNullElements() {
-            for (String handle : List.of("octocat", "a", "some-long-handle-123", "java-wizard")) {
+            for (String handle : List.of("octocat", "a", "some-long-handle-123", "demo-mei-ling-ho")) {
                 List<ImportedEvidence> evidence = adapter.importEvidence(handle);
                 assertThat(evidence).isNotNull().doesNotContainNull();
             }
         }
 
         @Test
-        void reportsTheLanguageNamedInTheHandle() {
-            assertThat(adapter.importEvidence("java-wizard"))
+        void returnsEmptyForHandlesWithoutACuratedFixture() {
+            // The whole point of option B: an unverified handle gets nothing, never invented skills.
+            assertThat(adapter.importEvidence("definitely-not-a-real-user-xyz-9f3k")).isEmpty();
+            assertThat(adapter.importEvidence("this-account-does-not-exist-7h2p")).isEmpty();
+            assertThat(adapter.importEvidence("demo-mei-ling-ho-typo")).isEmpty();
+        }
+
+        @Test
+        void theHandleSpellingNeverCreatesASkill() {
+            // "demo-mei-ling-ho" has a fixture, but its name is irrelevant; the fixture is, not the spelling.
+            assertThat(adapter.importEvidence("demo-mei-ling-ho"))
                     .extracting(ImportedEvidence::skillName)
-                    .contains("Java");
-            assertThat(adapter.importEvidence("pythonista"))
-                    .extracting(ImportedEvidence::skillName)
-                    .contains("Python");
+                    .containsExactly("Python", "Jupyter Notebook");
+            assertThat(adapter.importEvidence("javascript-fan")).isEmpty();
+        }
+
+        @Test
+        void servesTheFixtureForALowercaseOrUrlHandle() {
+            List<String> canonical = adapter.importEvidence("octocat")
+                    .stream().map(ImportedEvidence::skillName).toList();
+
+            assertThat(adapter.importEvidence("OctoCat"))
+                    .extracting(ImportedEvidence::skillName).containsExactlyElementsOf(canonical);
+            assertThat(adapter.importEvidence("  https://github.com/octocat/  "))
+                    .extracting(ImportedEvidence::skillName).containsExactlyElementsOf(canonical);
+        }
+
+        @Test
+        void fixtureEvidenceIsLabelledAsSampleDataNotAsFetchedEvidence() {
+            List<ImportedEvidence> evidence = adapter.importEvidence("octocat");
+
+            assertThat(evidence).isNotEmpty();
+            assertThat(evidence).allSatisfy(e -> {
+                assertThat(e.sourceName()).startsWith(ResearchDataAdapter.FIXTURE_SOURCE_PREFIX);
+                assertThat(e.evidenceSnippet()).startsWith(ResearchDataAdapter.OFFLINE_SNIPPET_PREFIX);
+                assertThat(e.isSampleData()).isTrue();
+                // The old fabrication claimed real repositories for any handle; that phrasing is gone.
+                assertThat(e.evidenceSnippet()).doesNotContain("public").doesNotContain("owned by");
+            });
         }
 
         @Test
@@ -85,30 +117,43 @@ class GitHubSkillAdapterTest {
         }
 
         @Test
-        void evidenceIsAttributedToTheHandle() {
-            assertThat(adapter.importEvidence("octocat"))
-                    .allSatisfy(e -> {
-                        assertThat(e.sourceName()).contains("octocat");
-                        assertThat(e.evidenceSnippet()).contains("octocat");
-                    });
+        void reportsNoMoreThanTheCap() {
+            for (String handle : List.of("octocat", "demo-mei-ling-ho", "demo-arjun-patel", "demo-sze-wing-lau",
+                    "zzz")) {
+                assertThat(adapter.importEvidence(handle)).hasSizeLessThanOrEqualTo(
+                        GitHubSkillAdapter.MAX_OFFLINE_SKILLS);
+            }
         }
 
         @Test
-        void someHandlesYieldFewerSkillsButNeverMoreThanTheCap() {
-            assertThat(adapter.importEvidence("octocat")).hasSizeLessThanOrEqualTo(3);
-            assertThat(adapter.importEvidence("zzz")).hasSizeLessThanOrEqualTo(3);
+        void everyCuratedFixtureRespectsTheCapAndPointsAtItsOwnHandle() {
+            assertThat(GitHubSkillAdapter.OFFLINE_FIXTURES).isNotEmpty();
+            GitHubSkillAdapter.OFFLINE_FIXTURES.forEach((handle, samples) -> {
+                assertThat(samples).isNotEmpty().hasSizeLessThanOrEqualTo(GitHubSkillAdapter.MAX_OFFLINE_SKILLS);
+                assertThat(samples).allSatisfy(e -> assertThat(e.sourceName()).startsWith(handle + "/"));
+                assertThat(adapter.importEvidence(handle))
+                        .extracting(ImportedEvidence::skillName)
+                        .containsExactlyElementsOf(samples.stream().map(ImportedEvidence::skillName).toList());
+            });
+        }
+
+        @Test
+        void everySeededStudentHandleHitsALiveFixture() {
+            // Guards the seeder/fixture agreement: a student whose handle has no fixture would see
+            // "No skills were found" for their own profile on a fresh checkout.
+            for (String handle : List.of("demo-mei-ling-ho", "demo-arjun-patel", "demo-sze-wing-lau")) {
+                assertThat(adapter.importEvidence(handle))
+                        .as("fixture for seeded student %s", handle)
+                        .isNotEmpty();
+            }
         }
 
         @Test
         void rejectsBlankHandles() {
             assertThatThrownBy(() -> adapter.importEvidence(null)).isInstanceOf(InvalidRequestException.class);
             assertThatThrownBy(() -> adapter.importEvidence("  ")).isInstanceOf(InvalidRequestException.class);
-        }
-
-        @Test
-        void acceptsAProfileUrlAndTrimsWhitespace() {
-            assertThat(adapter.importEvidence("  https://github.com/octocat/  "))
-                    .anySatisfy(e -> assertThat(e.sourceName()).contains("octocat"));
+            assertThatThrownBy(() -> adapter.importEvidence("https://github.com/"))
+                    .isInstanceOf(InvalidRequestException.class);
         }
     }
 

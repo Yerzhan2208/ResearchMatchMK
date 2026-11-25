@@ -13,6 +13,19 @@ import java.util.List;
  */
 public interface ResearchDataAdapter {
 
+    /**
+     * Prefix stamped on the {@code evidenceSnippet} of any sample produced without a live lookup, so a
+     * canned value can never be read as imported evidence.
+     */
+    String OFFLINE_SNIPPET_PREFIX = "Offline fixture (sample data, not fetched): ";
+
+    /**
+     * Prefix stamped on the {@code sourceName} of any sample produced without a live lookup. Callers that
+     * must not treat sample data as verified evidence (e.g. {@code ResearchMatchFacade#importSkills}) test
+     * for this prefix.
+     */
+    String FIXTURE_SOURCE_PREFIX = "fixture:";
+
     /** Logical, lowercase source name, e.g. {@code "github"}. Stable — used as a lookup key. */
     String platformName();
 
