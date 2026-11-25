@@ -2,6 +2,7 @@ package com.researchmatch.matching;
 
 import com.researchmatch.config.InvalidRequestException;
 import com.researchmatch.config.ResourceNotFoundException;
+import com.researchmatch.factory.MatchResultBuilder;
 import com.researchmatch.models.MatchResult;
 import com.researchmatch.models.Opportunity;
 import com.researchmatch.models.StudentProfile;
@@ -19,8 +20,10 @@ import java.util.stream.Collectors;
 /**
  * Public entry point for student–opportunity matching (Member 2).
  *
- * <p>Consumers: {@code ResearchMatchFacade} (Member 4) and tests (Member 5). Everything here is a contract;
- * behaviour is TODO.
+ * <p>Consumers: {@code ResearchMatchFacade} (Member 4) and tests (Member 5). {@link #evaluate(Long, Long)}
+ * runs the Eligibility → Semantic → Evidence → Explanation chain and assembles a {@link MatchResult} with
+ * {@link MatchResultBuilder}. {@link #rankOpportunities(Long, String)} evaluates candidate opportunities,
+ * excludes ineligible pairs, and ranks the rest with the requested strategy.
  */
 @Service
 public class MatchingEngine {
@@ -29,6 +32,7 @@ public class MatchingEngine {
     private final OpportunityRepository opportunityRepository;
     private final SystemConfigManager config;
     private final Map<String, RankingStrategy> strategies;
+    private final MatchLayerHandler head;
 
     /**
      * @param strategies every {@link RankingStrategy} bean, keyed by {@link RankingStrategy#name()}
@@ -42,6 +46,39 @@ public class MatchingEngine {
         this.config = Objects.requireNonNull(config, "config");
         this.strategies = Objects.requireNonNull(strategies, "strategies").stream()
                 .collect(Collectors.toUnmodifiableMap(RankingStrategy::name, Function.identity()));
+        this.head = buildChain(config);
+    }
+
+    /**
+     * Assembles Eligibility → Semantic → Evidence → Explanation. The {@code SemanticMatchHandler} shares the
+     * engine's {@link SystemConfigManager} so weight resolution is consistent.
+     */
+    private static MatchLayerHandler buildChain(SystemConfigManager config) {
+        MatchLayerHandler explanation = new ExplanationHandler();
+        MatchLayerHandler evidence = new EvidenceScoreHandler();
+        MatchLayerHandler semantic = new SemanticMatchHandler(config);
+        MatchLayerHandler eligibility = new EligibilityFilterHandler();
+        return link(eligibility, link(semantic, link(evidence, explanation)));
+    }
+
+    /** Links {@code handler} before {@code next} by overriding {@code handle} to defer to it. */
+    private static MatchLayerHandler link(MatchLayerHandler handler, MatchLayerHandler next) {
+        return new MatchLayerHandler() {
+            @Override
+            public String layerName() {
+                return handler.layerName();
+            }
+
+            @Override
+            public LayerResult evaluate(MatchContext context) {
+                return handler.evaluate(context);
+            }
+
+            @Override
+            public MatchContext handle(MatchContext context, MatchLayerHandler ignored) {
+                return MatchLayerHandler.super.handle(context, next);
+            }
+        };
     }
 
     /**
@@ -50,23 +87,73 @@ public class MatchingEngine {
      * @return never null; {@code eligible == false} carries the reason in the explanation
      * @throws ResourceNotFoundException if either id does not exist
      * @throws InvalidRequestException   if an id is null
-     * TODO (Member 2): wire Eligibility → Semantic → Evidence → Explanation and use
-     * {@code MatchResultBuilder}.
      */
     public MatchResult evaluate(Long studentId, Long opportunityId) {
-        throw new UnsupportedOperationException("TODO (Member 2): MatchingEngine.evaluate");
+        if (studentId == null || opportunityId == null) {
+            throw new InvalidRequestException("Both a student id and an opportunity id are required");
+        }
+        StudentProfile student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student " + studentId + " not found"));
+        Opportunity opportunity = opportunityRepository.findById(opportunityId)
+                .orElseThrow(() -> new ResourceNotFoundException("Opportunity " + opportunityId + " not found"));
+        return evaluatePair(student, opportunity);
+    }
+
+    /** Runs the chain for an already-loaded pair and builds its {@link MatchResult}. Never null. */
+    private MatchResult evaluatePair(StudentProfile student, Opportunity opportunity) {
+        MatchContext context = newContext(student, opportunity);
+        MatchContext done = head.handle(context, null);
+
+        return new MatchResultBuilder()
+                .studentId(student.getId())
+                .opportunityId(opportunity.getId())
+                .totalScore(done.getTotalScore())
+                .eligible(done.isEligible())
+                .matchedSkills(done.getMatchedSkills())
+                .missingSkills(done.getMissingSkills())
+                .explanationSummary(done.getExplanationSummary())
+                .recommendedPrep(done.getRecommendedPrep())
+                .build();
     }
 
     /**
      * Evaluates {@code studentId} against every (or every beginner-friendly) opportunity and ranks them.
      *
-     * @param strategyName a {@link RankingStrategy#name()}; unknown names raise {@code InvalidRequestException}
+     * @param strategyName a {@link RankingStrategy#name()}; null/blank defaults to balanced, unknown names
+     *                     raise {@code InvalidRequestException}
      * @return never null, ordered by the strategy, capped at {@code matching.maxResults}
      * @throws ResourceNotFoundException if the student does not exist
-     * TODO (Member 2)
+     * @throws InvalidRequestException   if {@code studentId} is null
      */
     public List<MatchResult> rankOpportunities(Long studentId, String strategyName) {
-        throw new UnsupportedOperationException("TODO (Member 2): MatchingEngine.rankOpportunities");
+        if (studentId == null) {
+            throw new InvalidRequestException("A student id is required to rank opportunities");
+        }
+        StudentProfile student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student " + studentId + " not found"));
+
+        RankingStrategy ranking = strategy(strategyName);
+
+        List<Opportunity> candidates = BalancedMatchStrategy.NAME.equals(ranking.name())
+                || SkillStrictStrategy.NAME.equals(ranking.name())
+                ? opportunityRepository.findAll()
+                : opportunityRepository.findByBeginnerFriendlyTrue();
+        if (candidates == null) {
+            candidates = List.of();
+        }
+
+        List<MatchResult> results = candidates.stream()
+                .filter(Objects::nonNull)
+                .map(opportunity -> evaluatePair(student, opportunity))
+                .filter(MatchResult::isEligible)
+                .collect(Collectors.toCollection(java.util.ArrayList::new));
+
+        List<MatchResult> ranked = ranking.rank(results);
+        int limit = config.getInt(SystemConfigManager.KEY_MAX_MATCH_RESULTS, 20);
+        if (limit < 0) {
+            limit = 0;
+        }
+        return ranked.size() > limit ? new java.util.ArrayList<>(ranked.subList(0, limit)) : ranked;
     }
 
     /** Resolves a configured strategy name; the default name is {@link BalancedMatchStrategy#NAME}. */

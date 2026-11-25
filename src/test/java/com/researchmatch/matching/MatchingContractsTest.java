@@ -1,6 +1,7 @@
 package com.researchmatch.matching;
 
 import com.researchmatch.config.InvalidRequestException;
+import com.researchmatch.models.MatchResult;
 import com.researchmatch.models.Opportunity;
 import com.researchmatch.models.StudentProfile;
 import com.researchmatch.repository.OpportunityRepository;
@@ -84,34 +85,30 @@ class MatchingContractsTest {
     }
 
     @Test
-    void enginePlaceholdersAreExplicitTodos() {
+    void rankOpportunitiesRejectsNullStudentId() {
         MatchingEngine engine = engine(List.of(BALANCED));
-        MatchContext context = engine.newContext(new StudentProfile(), new Opportunity());
 
-        assertThatThrownBy(() -> engine.evaluate(1L, 2L))
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessageStartingWith("TODO (Member 2)")
-                .hasMessageContaining("MatchingEngine.evaluate");
-        assertThatThrownBy(() -> engine.rankOpportunities(1L, null))
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessageContaining("rankOpportunities");
-        assertThatThrownBy(() -> BALANCED.rank(List.of())).isInstanceOf(UnsupportedOperationException.class);
-        assertThatThrownBy(() -> BEGINNER.rank(List.of())).isInstanceOf(UnsupportedOperationException.class);
-        assertThatThrownBy(() -> STRICT.rank(List.of())).isInstanceOf(UnsupportedOperationException.class);
-        assertThat(context).isNotNull();
+        assertThatThrownBy(() -> engine.rankOpportunities(null, BalancedMatchStrategy.NAME))
+                .isInstanceOf(InvalidRequestException.class);
     }
 
     @Test
-    void handlersDeclareTheirLayerAndTodoBehaviour() {
+    void strategiesRankEmptyInputToNewNonNullList() {
+        List<MatchResult> balanced = BALANCED.rank(List.of());
+        List<MatchResult> beginner = BEGINNER.rank(List.of());
+        List<MatchResult> strict = STRICT.rank(List.of());
+
+        assertThat(balanced).isNotNull().isEmpty();
+        assertThat(beginner).isNotNull().isEmpty();
+        assertThat(strict).isNotNull().isEmpty();
+    }
+
+    @Test
+    void handlersDeclareTheirLayer() {
         assertThat(new EligibilityFilterHandler().layerName()).isEqualTo(EligibilityFilterHandler.LAYER);
         assertThat(new SemanticMatchHandler().layerName()).isEqualTo(SemanticMatchHandler.LAYER);
         assertThat(new EvidenceScoreHandler().layerName()).isEqualTo(EvidenceScoreHandler.LAYER);
         assertThat(new ExplanationHandler().layerName()).isEqualTo(ExplanationHandler.LAYER);
-
-        MatchContext context = new MatchContext(new StudentProfile(), new Opportunity());
-        assertThatThrownBy(() -> new EligibilityFilterHandler().evaluate(context))
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessageContaining("EligibilityFilterHandler");
     }
 
     @Test

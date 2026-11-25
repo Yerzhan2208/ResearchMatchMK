@@ -17,6 +17,40 @@ run.bat                          # java -jar target/researchmatch.jar  (http://l
 CI (`.github/workflows/ci.yml`) runs `mvn clean test jacoco:report` on every push/PR and uploads
 `target/site/jacoco` as the `jacoco-report` artifact.
 
+## Coverage dashboard
+
+**Easiest — run tests and get the dashboard in one command:**
+
+```bash
+./test.sh            # run tests, print summary, write + open target/site/jacoco-dashboard.html
+./test.sh --no-open  # same, but just write the dashboard (no browser)
+```
+
+On Windows use `test.bat` (same flags). This auto-selects JDK 17, runs the full suite, and produces a
+clickable HTML dashboard plus a terminal summary.
+
+For finer control, use the underlying tool:
+
+```bash
+scripts/coverage.sh              # overall line/branch % + per-class gap table (auto-runs tests if no report)
+scripts/coverage.sh --run --html # run tests, then write target/site/jacoco-dashboard.html
+scripts/coverage.sh --open       # open the JaCoCo HTML report in a browser
+```
+
+On Windows use `scripts\coverage.bat`. The tool wraps `scripts/coverage.py` (Python 3, no extra deps),
+works from any directory, and flags any class still missing tests. Project policy: **100% line coverage**,
+**≥ 85% branch** (see [`AGENTS.md`](AGENTS.md) §5).
+
+> **JDK 17 required.** The project targets Java 17; Mockito's inline mock maker fails on newer JDKs
+> (e.g. 21/27) with `Could not modify all classes`. `scripts/coverage.sh` auto-selects a JDK 17 (an
+> existing `JAVA_HOME`, or macOS `/usr/libexec/java_home -v 17`) and gives a clear message if none is
+> found. If you run `mvn` yourself, set `JAVA_HOME` to a JDK 17 first.
+
+## Agent notes
+
+Session hand-off notes (what was done, decisions, follow-ups) live in [`agent-notes/`](agent-notes/).
+
+
 ## Layout
 
 ```
