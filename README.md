@@ -19,7 +19,17 @@ CI (`.github/workflows/ci.yml`) runs `mvn clean test jacoco:report` on every pus
 
 ## Coverage dashboard
 
-After running the tests, view coverage without parsing Maven output:
+**Easiest — run tests and get the dashboard in one command:**
+
+```bash
+./test.sh            # run tests, print summary, write + open target/site/jacoco-dashboard.html
+./test.sh --no-open  # same, but just write the dashboard (no browser)
+```
+
+On Windows use `test.bat` (same flags). This auto-selects JDK 17, runs the full suite, and produces a
+clickable HTML dashboard plus a terminal summary.
+
+For finer control, use the underlying tool:
 
 ```bash
 scripts/coverage.sh              # overall line/branch % + per-class gap table (auto-runs tests if no report)
