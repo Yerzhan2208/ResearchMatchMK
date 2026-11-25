@@ -88,10 +88,6 @@ class MatchingContractsTest {
         MatchingEngine engine = engine(List.of(BALANCED));
         MatchContext context = engine.newContext(new StudentProfile(), new Opportunity());
 
-        assertThatThrownBy(() -> engine.evaluate(1L, 2L))
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessageStartingWith("TODO (Member 2)")
-                .hasMessageContaining("MatchingEngine.evaluate");
         assertThatThrownBy(() -> engine.rankOpportunities(1L, null))
                 .isInstanceOf(UnsupportedOperationException.class)
                 .hasMessageContaining("rankOpportunities");
