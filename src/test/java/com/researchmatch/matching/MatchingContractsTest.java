@@ -1,6 +1,7 @@
 package com.researchmatch.matching;
 
 import com.researchmatch.config.InvalidRequestException;
+import com.researchmatch.models.MatchResult;
 import com.researchmatch.models.Opportunity;
 import com.researchmatch.models.StudentProfile;
 import com.researchmatch.repository.OpportunityRepository;
@@ -91,10 +92,18 @@ class MatchingContractsTest {
         assertThatThrownBy(() -> engine.rankOpportunities(1L, null))
                 .isInstanceOf(UnsupportedOperationException.class)
                 .hasMessageContaining("rankOpportunities");
-        assertThatThrownBy(() -> BALANCED.rank(List.of())).isInstanceOf(UnsupportedOperationException.class);
-        assertThatThrownBy(() -> BEGINNER.rank(List.of())).isInstanceOf(UnsupportedOperationException.class);
-        assertThatThrownBy(() -> STRICT.rank(List.of())).isInstanceOf(UnsupportedOperationException.class);
         assertThat(context).isNotNull();
+    }
+
+    @Test
+    void strategiesRankEmptyInputToNewNonNullList() {
+        List<MatchResult> balanced = BALANCED.rank(List.of());
+        List<MatchResult> beginner = BEGINNER.rank(List.of());
+        List<MatchResult> strict = STRICT.rank(List.of());
+
+        assertThat(balanced).isNotNull().isEmpty();
+        assertThat(beginner).isNotNull().isEmpty();
+        assertThat(strict).isNotNull().isEmpty();
     }
 
     @Test
