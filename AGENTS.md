@@ -6,6 +6,10 @@ These rules are **binding for every future OpenCode session** (and any AI or hum
 Read this file fully, plus [`docs/integration-contracts.md`](docs/integration-contracts.md), before changing
 anything. If a task conflicts with these files, stop and ask.
 
+Session hand-off notes live in [`agent-notes/`](agent-notes/) (one Markdown file per task, see its
+[README](agent-notes/README.md)); add a note there at the end of each task. Coverage can be inspected with
+`scripts/coverage.sh` (see §5).
+
 ---
 
 ## 1. Tech stack (non-negotiable)
@@ -99,6 +103,9 @@ the DB column (`nullable = false`).
 - Use Mockito for collaborators; use `@SpringBootTest` only for wiring/integration.
 - `ApplicationContextTest` is the baseline wiring check: if it fails, the branch does not integrate.
 - `config/DataSeeder` runs on startup, so the test DB is **not empty**. Do not assert `count() == 0`.
+- View coverage any time with **`scripts/coverage.sh`** (or `coverage.bat`; wraps `scripts/coverage.py`):
+  prints overall line/branch % with PASS/FAIL, a per-class gap table, `--html` for a dashboard and
+  `--open` for the JaCoCo HTML report. New code that lacks tests shows up as a `gap` row.
 
 ---
 
