@@ -255,7 +255,9 @@ found". No evidence is ever derived from the handle's spelling or hash.
 
 Offline results are labelled as sample data: `sourceName` is prefixed with `FIXTURE_SOURCE_PREFIX`
 (`fixture:`), `evidenceSnippet` with `OFFLINE_SNIPPET_PREFIX`, and `ImportedEvidence#isSampleData()` reports
-it. The facade persists these rows as evidence; see §6 for how they are treated as verified skills.
+it. `ResearchMatchFacade#importSkills` therefore stores sample rows with `verifiedByStudent = false` and
+**never** promotes them into `StudentProfile.verifiedSkills` — only live-lookup rows become verified skills.
+The profile page shows the unverified state, and matching does not treat sample data as established skills.
 
 The fixture keys are the handles the demo actually uses: the seeded students (`demo-mei-ling-ho`,
 `demo-arjun-patel`, `demo-sze-wing-lau`) and the seeded faculty OpenAlex id (`A2RRCMK3ZDBF7`, Prof. Wei Chan,
@@ -505,6 +507,7 @@ Circular dependency risk: none. `models`/`repository` ← everyone; `matching` �
 | --- | --- | --- |
 | baseline | Initial contracts (this file) | Member 1 |
 | schema-1 | Added `Opportunity.minAcademicYear` (default `1`, 4-arg constructor preserved) + `OpportunityBuilder.minAcademicYear(Integer)`; documented `StudentProfile.academicYear` (1–4) and the Layer 1 eligibility rule | Member 1 |
+| adapters-1 | Offline mode narrowed to a curated fixture map: unknown handles/author ids return empty instead of hash-derived fabricated evidence; added `ResearchDataAdapter.OFFLINE_SNIPPET_PREFIX` / `FIXTURE_SOURCE_PREFIX` and `ImportedEvidence#isSampleData()` so sample data is visibly labelled; fixture keys aligned with `DataSeeder` (seeded students + Prof. Wei Chan's OpenAlex id, areas mirrored) and unused invented ids dropped. **`ResearchMatchFacade#importSkills` no longer promotes sample-data rows into `verifiedSkills`** (Member 4's file, changed with the group's agreement that fixture data must not become a verified credential) | Member 3, **pending group ratification** |
 
 ---
 
