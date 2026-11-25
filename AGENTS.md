@@ -91,6 +91,7 @@ the DB column (`nullable = false`).
 
 - Every feature PR **MUST include JUnit 5 tests**; new/changed code must keep the bundle at
   **≥ 85 % branch coverage** (`mvn verify` enforces it).
+- The project must maintain **100 % line coverage with no exceptions**; strive for **100 % branch coverage**, keeping the existing **≥ 85 %** gate as the enforced minimum.
 - Tests mirror main packages: `matching/X.java` → `src/test/java/com/researchmatch/matching/XTest.java`.
 - Each member owns the tests for their components. **Member 5** owns end-to-end integration tests
   (`src/test/java/com/researchmatch/integration/`) and coordinates coverage improvements — coordinate
