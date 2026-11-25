@@ -321,7 +321,8 @@ back a transition. An observer must be idempotent.
 ### `RecruitmentPipeline` (Spring `@Service`)
 
 ```java
-RecruitmentPipeline(ApplicationRepository, OpportunityRepository, ApplicationStateFactory, ApplicationSubject);
+RecruitmentPipeline(ApplicationRepository, OpportunityRepository, StudentRepository,
+                    ApplicationStateFactory, ApplicationSubject);
 Application submit(Long studentId, Long opportunityId, String statement);  // status NEW, notifies
 Application shortlist(Long applicationId);
 Application scheduleInterview(Long applicationId);
@@ -334,10 +335,41 @@ Every method returns the persisted entity (non-null) and throws `ResourceNotFoun
 and `IllegalStateTransitionException` for a disallowed move. Exactly one `notifyStatusChanged` per successful
 transition.
 
+`StudentRepository` is a constructor dependency because `submit` verifies the student exists before creating
+an application; no other collaborator in this graph can answer that query.
+
+`submit` additionally throws `InvalidRequestException` when:
+
+- either id is null;
+- the statement exceeds `RecruitmentPipeline.MAX_STATEMENT_LENGTH` (4000) characters;
+- **the student already applied to that opportunity.**
+
+**Duplicate-application rule (one application per `(studentId, opportunityId)` pair).** The rule was
+previously stated only in `ResearchMatchFacade#submitApplication` (Member 4), whose javadoc attributes it to
+this service; it is documented here so both members agree on a single owner. Rationale:
+
+- `Application` carries one `status`, so two live rows for the same pair could sit in different states and
+  make "accept" ambiguous.
+- `maxApplicants` is measured by `countByOpportunityIdAndStatus`, which a duplicate would inflate.
+- Rejecting the request keeps the failure loud instead of silently creating a second row.
+
+The check is implemented over `ApplicationRepository#findByStudentId`; it is linear in the student's
+application count. A dedicated finder would be preferable but requires a change to a FROZEN repository.
+
 ### DataSeeder (Spring bean, `CommandLineRunner`)
 
-`config/DataSeeder` inserts one faculty member and two opportunities **only when `opportunityRepository.count() == 0`**.
-`ApplicationContextTest` therefore asserts `opportunityRepository.count() > 0` — never assume an empty DB.
+`config/DataSeeder` seeds three CityUHK faculty members, six opportunities and four students **only when
+`opportunityRepository.count() == 0`**, so seeding is idempotent and `ApplicationContextTest` can assert
+`opportunityRepository.count() > 0` — never assume an empty DB. Its constructor takes
+`(FacultyRepository, OpportunityRepository, StudentRepository)`; the student repository is used solely to
+seed sample students. Seeded students keep `searchableByFaculty = false`.
+
+Seeded handles are chosen to work offline: the students' GitHub usernames are `demo-mei-ling-ho`,
+`demo-arjun-patel`, `demo-sze-wing-lau` (matching the GitHub fixtures) and Prof. Wei Chan's OpenAlex id is
+`A2RRCMK3ZDBF7` (matching the OpenAlex fixture that mirrors his research areas). The other two faculty have no
+OpenAlex id — a null id is valid and simply means no publication import. All of this identity data is
+fictional: the `demo-` prefix on student handles, and an OpenAlex id that is ours rather than a real record,
+are deliberate markers. The app never contacts GitHub or OpenAlex to verify them.
 
 ---
 
