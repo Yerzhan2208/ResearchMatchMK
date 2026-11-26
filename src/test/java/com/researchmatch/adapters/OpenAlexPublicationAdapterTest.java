@@ -19,6 +19,9 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 class OpenAlexPublicationAdapterTest {
 
+    /** The offline fixture key, and the id the seeder gives Prof. Wei Chan. */
+    private static final String DEMO_AUTHOR_ID = "A2RRCMK3ZDBF7";
+
     private static RestClient client(MockRestServiceServer[] holder) {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://api.openalex.org");
         holder[0] = MockRestServiceServer.bindTo(builder).build();
@@ -40,13 +43,14 @@ class OpenAlexPublicationAdapterTest {
 
         @Test
         void isDeterministicForTheSameAuthorId() {
-            assertThat(adapter.importEvidence("A5012345601"))
-                    .isEqualTo(adapter.importEvidence("A5012345601"));
+            assertThat(adapter.importEvidence(DEMO_AUTHOR_ID))
+                    .isNotEmpty()
+                    .isEqualTo(adapter.importEvidence(DEMO_AUTHOR_ID));
         }
 
         @Test
         void neverReturnsNullOrNullElementsAndKeepsAreasDistinct() {
-            for (String id : List.of("A1", "A1234567890", "A999", "A77777")) {
+            for (String id : List.of("A1", DEMO_AUTHOR_ID, "A999", "A5023888391")) {
                 List<ImportedEvidence> evidence = adapter.importEvidence(id);
                 assertThat(evidence).isNotNull().doesNotContainNull();
                 assertThat(evidence).extracting(ImportedEvidence::skillName).doesNotHaveDuplicates();
@@ -54,35 +58,36 @@ class OpenAlexPublicationAdapterTest {
         }
 
         @Test
+        void anAuthorIdWithoutACuratedFixtureYieldsNothing() {
+            // Option B: an unverified id gets an empty list, never invented research areas.
+            assertThat(adapter.importEvidence("A9999999999")).isEmpty();
+            assertThat(adapter.importEvidence("A1")).isEmpty();
+            // The previously fabricated, real-looking ids are gone.
+            assertThat(adapter.importEvidence("A5012345601")).isEmpty();
+            assertThat(adapter.importEvidence("A5023888391")).isEmpty();
+        }
+
+        @Test
         void reportsAtMostTheCapAndInBoundsConfidences() {
-            for (String id : List.of("A1", "A2", "A3", "A4", "A5", "A6")) {
+            assertThat(OpenAlexPublicationAdapter.OFFLINE_FIXTURES).isNotEmpty();
+            OpenAlexPublicationAdapter.OFFLINE_FIXTURES.forEach((id, samples) -> {
                 List<ImportedEvidence> evidence = adapter.importEvidence(id);
-                assertThat(evidence).hasSizeLessThanOrEqualTo(OpenAlexPublicationAdapter.MAX_OFFLINE_AREAS);
-                assertThat(evidence).allSatisfy(
-                        e -> assertThat(e.confidence()).isBetween(0.0, 1.0));
-            }
+                assertThat(evidence).hasSize(samples.size())
+                        .hasSizeLessThanOrEqualTo(OpenAlexPublicationAdapter.MAX_OFFLINE_AREAS);
+                assertThat(evidence).allSatisfy(e -> assertThat(e.confidence()).isBetween(0.0, 1.0));
+            });
         }
 
         @Test
-        void evidenceIsAttributedToTheAuthorId() {
-            assertThat(adapter.importEvidence("A5012345601"))
-                    .allSatisfy(e -> assertThat(e.sourceName()).isEqualTo("openalex:A5012345601"));
-        }
-
-        @Test
-        void someAuthorIdsModelAnAuthorWithNoIndexedWorks() {
-            List<String> emptyIds = new java.util.ArrayList<>();
-            for (int i = 0; i < 200; i++) {
-                String id = "A" + i;
-                if (adapter.importEvidence(id).isEmpty()) {
-                    emptyIds.add(id);
-                }
-            }
-
-            // The offline profile deliberately models "author with no indexed works" for some ids,
-            // so the empty result path is exercised without inventing data.
-            assertThat(emptyIds).isNotEmpty();
-            assertThat(adapter.importEvidence(emptyIds.get(0))).isEmpty();
+        void evidenceIsLabelledAsSampleDataUnderTheRequestedAuthorId() {
+            assertThat(adapter.importEvidence(DEMO_AUTHOR_ID))
+                    .allSatisfy(e -> {
+                        assertThat(e.sourceName())
+                                .isEqualTo(ResearchDataAdapter.FIXTURE_SOURCE_PREFIX + "openalex:" + DEMO_AUTHOR_ID);
+                        assertThat(e.evidenceSnippet())
+                                .startsWith(ResearchDataAdapter.OFFLINE_SNIPPET_PREFIX);
+                        assertThat(e.isSampleData()).isTrue();
+                    });
         }
 
         @Test
@@ -96,8 +101,8 @@ class OpenAlexPublicationAdapterTest {
 
         @Test
         void stripsAFullOpenAlexUrl() {
-            assertThat(adapter.importEvidence("https://openalex.org/A5012345601"))
-                    .isEqualTo(adapter.importEvidence("A5012345601"));
+            assertThat(adapter.importEvidence("https://openalex.org/" + DEMO_AUTHOR_ID))
+                    .isEqualTo(adapter.importEvidence(DEMO_AUTHOR_ID));
         }
     }
 
@@ -188,6 +193,14 @@ class OpenAlexPublicationAdapterTest {
             assertThat(evidence.get(0).confidence()).isEqualTo(1.0);
             assertThat(evidence.get(0).evidenceSnippet()).contains("1 of 1");
         }
+
+        @Test
+        void liveResultsAreNotLabelledAsSampleData() {
+            List<ImportedEvidence> evidence = OpenAlexPublicationAdapter.deriveAreas("A1",
+                    List.of(workWith("Vision", null, null)));
+
+            assertThat(evidence).noneMatch(ImportedEvidence::isSampleData);
+        }
     }
 
     // ================================================================== online mode
@@ -218,6 +231,7 @@ class OpenAlexPublicationAdapterTest {
             assertThat(evidence).extracting(ImportedEvidence::skillName)
                     .containsExactly("Natural language processing", "Computer vision");
             assertThat(evidence.get(0).confidence()).isEqualTo(0.67);
+            assertThat(evidence).noneMatch(ImportedEvidence::isSampleData);
         }
 
         @Test

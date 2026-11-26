@@ -56,10 +56,14 @@ public class MatchResultBuilder {
     }
 
     /**
-     * Returns the fully initialised result.
+     * Returns the fully initialised result; never null.
      *
-     * <p>Intentionally free of domain invariants: score bounds and eligibility are the matching chain's
-     * (Member 2) rules, and duplicating them here would give the same rule two owners.
+     * <p>Per {@code docs/integration-contracts.md} §5 this method performs <strong>no validation</strong>.
+     * Unlike {@link OpportunityBuilder#build()}, which rejects bad input with {@code InvalidRequestException},
+     * a {@code MatchResult} is a computed value rather than user input: its score, eligibility and skill sets
+     * are produced by the matching chain (Member 2) and must be recorded as produced, so they can be inspected
+     * and explained. Do not add invariants here — that would turn a faithful result record into a second,
+     * competing source of truth about what a valid match is.
      */
     public MatchResult build() {
         return result;

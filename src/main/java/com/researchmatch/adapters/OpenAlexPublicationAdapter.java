@@ -9,24 +9,26 @@ import org.springframework.web.client.RestClient;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Imports a faculty member's publication areas from OpenAlex.
  *
  * <p><strong>Two modes.</strong> When {@code researchmatch.openalex.enabled=true} the adapter calls the public
  * OpenAlex API ({@code /works?filter=author.id:{id}}) and folds each work's primary topic / concepts into a
- * research area. Otherwise it runs in a <em>deterministic offline mode</em>: no network access, and a stable
- * rule-based area profile derived from the OpenAlex id, so demos and CI behave identically everywhere.
+ * research area, so the areas come from the author's own indexed works.
+ *
+ * <p>Otherwise it runs offline and never touches the network. Offline it reports only the <em>curated
+ * fixtures</em> listed in {@link #OFFLINE_FIXTURES}; <strong>any other author id yields an empty list</strong>,
+ * which the contract defines as "nothing found". Offline results are labelled as sample data so they cannot be
+ * read as fetched evidence.
  *
  * <p>Areas are normalised to title case and de-duplicated case-insensitively, so OpenAlex's
  * {@code "natural language processing"} and {@code "Natural Language Processing"} never appear twice.
  *
- * <p>Nothing is ever invented: an unknown or empty author yields an empty list.
+ * <p>An unknown author, or one with no works, yields an empty list; no area is ever inferred from the id.
  */
 @Component
 public class OpenAlexPublicationAdapter implements ResearchDataAdapter {
@@ -36,13 +38,23 @@ public class OpenAlexPublicationAdapter implements ResearchDataAdapter {
     /** System property / config key that switches the adapter to live OpenAlex calls. */
     public static final String ENABLED_PROPERTY = "researchmatch.openalex.enabled";
 
-    /** Offline mode reports at most this many research areas. */
+    /** Offline mode reports at most this many areas per author, strongest first. */
     static final int MAX_OFFLINE_AREAS = 4;
 
-    /** Areas the offline profile can report. */
-    static final List<String> OFFLINE_AREAS = List.of(
-            "Natural Language Processing", "Data Mining", "Computer Vision",
-            "Software Engineering", "Human-Computer Interaction", "Machine Learning");
+    /**
+     * Curated sample profiles used by offline mode, keyed by OpenAlex author id. These are the only ids
+     * offline mode answers for; any other id yields an empty list. Keys are matched case-insensitively.
+     *
+     * <p>{@code A2RRCMK3ZDBF7} is the id {@code config/DataSeeder} gives Prof. Wei Chan, so "Import from
+     * OpenAlex" works on a fresh checkout with no mailto configured. The id is ours, not a real OpenAlex
+     * record, and the areas below mirror the seeder rather than any published work.
+     */
+    static final Map<String, List<ImportedEvidence>> OFFLINE_FIXTURES = Map.of(
+            "A2RRCMK3ZDBF7", List.of(
+                    new ImportedEvidence("Natural language processing", "openalex:A2RRCMK3ZDBF7",
+                            "sample works on parsing and sentiment analysis", 0.67),
+                    new ImportedEvidence("Machine learning", "openalex:A2RRCMK3ZDBF7",
+                            "sample works on learned text representations", 0.33)));
 
     private static final String OPENALEX_API = "https://api.openalex.org";
 
@@ -108,29 +120,16 @@ public class OpenAlexPublicationAdapter implements ResearchDataAdapter {
     // ------------------------------------------------------------------ offline mode
 
     /**
-     * Deterministic, network-free area profile: the same author id always yields the same areas, in a stable
-     * order, with strictly decreasing confidence.
+     * Returns the curated fixture for {@code authorId}, re-labelled as sample data, or an empty list when the
+     * id has no fixture. Nothing is derived from the id itself.
      */
     List<ImportedEvidence> offlineAreas(String authorId) {
-        int hash = Math.abs(authorId.hashCode());
-        if (hash % 11 == 0) {
-            // Models an author with no indexed works: nothing is invented.
-            return List.of();
-        }
-        int count = 1 + (hash % MAX_OFFLINE_AREAS);
-        int offset = hash % OFFLINE_AREAS.size();
-
-        List<ImportedEvidence> evidence = new ArrayList<>(count);
-        for (int i = 0; i < count && i < OFFLINE_AREAS.size(); i++) {
-            String area = OFFLINE_AREAS.get((offset + i) % OFFLINE_AREAS.size());
-            double confidence = round(1.0 - (i * 0.2));
-            evidence.add(new ImportedEvidence(
-                    area,
-                    "openalex:" + authorId,
-                    "Offline sample: the author's indexed works are tagged " + area,
-                    confidence));
-        }
-        return evidence;
+        Map<String, List<ImportedEvidence>> byLowerId = new LinkedHashMap<>();
+        OFFLINE_FIXTURES.forEach((id, samples) -> byLowerId.put(id.toLowerCase(Locale.ROOT), samples));
+        return ImportedEvidence.forHandle(byLowerId, authorId.toLowerCase(Locale.ROOT)).stream()
+                .limit(MAX_OFFLINE_AREAS)
+                .map(ImportedEvidence::asFixture)
+                .toList();
     }
 
     private static double round(double value) {

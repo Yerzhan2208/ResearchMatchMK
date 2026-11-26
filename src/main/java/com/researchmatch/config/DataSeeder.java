@@ -52,11 +52,15 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private void seedFacultiesAndOpportunities() {
+        // OpenAlex ids are OURS, not real: OpenAlex assigns ids in the real A5xxxxxxxxx space and this
+        // fictional faculty member has no real record to point at. A2RRCMK3ZDBF7 matches the offline
+        // fixture in OpenAlexPublicationAdapter, so "Import from OpenAlex" works on a fresh checkout with
+        // no API key; the app never calls OpenAlex to verify it.
         FacultyProfile chan = facultyRepository.save(faculty(
-                "Prof. Wei Chan", "Computer Science", "A5012345601",
+                "Prof. Wei Chan", "Computer Science", "A2RRCMK3ZDBF7",
                 "Natural Language Processing", "Machine Learning"));
         FacultyProfile wong = facultyRepository.save(faculty(
-                "Dr. Ka-Yan Wong", "Computer Science", "A5012345602",
+                "Dr. Ka-Yan Wong", "Computer Science", null,
                 "Data Mining", "Databases"));
         FacultyProfile lam = facultyRepository.save(faculty(
                 "Dr. Ho-Yan Lam", "Computer Science", null,
@@ -147,11 +151,11 @@ public class DataSeeder implements CommandLineRunner {
     private void seedStudents() {
         studentRepository.saveAll(List.of(
                 student("Mei-Ling Ho", "mei-ling.ho@my.cityu.edu.hk", "Computer Science", 3, 12,
-                        Set.of("NLP", "Data Mining"), Set.of("Python", "SQL"), "mei-ling-ho"),
+                        Set.of("NLP", "Data Mining"), Set.of("Python", "SQL"), "demo-mei-ling-ho"),
                 student("Arjun Patel", "arjun.patel@my.cityu.edu.hk", "Data Science", 2, 10,
-                        Set.of("Machine Learning"), Set.of("Python", "Pandas"), "arjunpatel"),
-                student("Sze-Wing Lau", "sze-wing.lau@my.cityu.edu.hk", "Computer Science", 4, 8,
-                        Set.of("Computer Vision", "Databases"), Set.of("Java", "OpenCV"), "szewinglau"),
+                        Set.of("Machine Learning"), Set.of("Python", "Pandas"), "demo-arjun-patel"),
+                student("Sze-Wing Lau", "szewing.lau@my.cityu.edu.hk", "Computer Science", 4, 8,
+                        Set.of("Computer Vision", "Databases"), Set.of("Java", "OpenCV"), "demo-sze-wing-lau"),
                 student("Daniel Chan", "daniel.chan@my.cityu.edu.hk", "Information Engineering", 1, 6,
                         Set.of("Human-Computer Interaction"), Set.of("Figma"), null)));
     }

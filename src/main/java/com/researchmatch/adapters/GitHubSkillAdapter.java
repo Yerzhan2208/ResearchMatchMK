@@ -20,13 +20,18 @@ import java.util.Set;
  *
  * <p><strong>Two modes.</strong> When {@code researchmatch.github.token} is configured the adapter calls the
  * public GitHub REST API ({@code /users/{handle}/repos}) and derives skills from repository languages and
- * topics. Without a token it runs in a <em>deterministic offline mode</em>: no network access at all, and a
- * stable rule-based profile derived from the handle, so demos and CI behave identically on every machine.
+ * topics, so the evidence comes from the account itself.
  *
- * <p>Confidence is the fraction of the user's repositories that exhibit the skill
+ * <p>Without a token it runs offline and never touches the network. Offline it reports only the
+ * <em>curated fixtures</em> listed in {@link #OFFLINE_FIXTURES} — canned sample profiles for a handful of
+ * handles used by demos. <strong>Any other handle yields an empty list</strong>, which the contract defines as
+ * "nothing found". Offline results are labelled as sample data ({@code fixture:} sources,
+ * {@link ResearchDataAdapter#OFFLINE_SNIPPET_PREFIX} snippets) so they cannot be read as fetched evidence.
+ *
+ * <p>Live confidence is the fraction of the user's repositories that exhibit the skill
  * ({@code reposUsingSkill / repoCount}, clamped to {@code [0, 1]}), which is easy to explain and stable.
  *
- * <p>Nothing is ever invented: a user with no repositories yields an empty list.
+ * <p>A user with no repositories yields an empty list; no evidence is ever inferred from a handle's spelling.
  */
 @Component
 public class GitHubSkillAdapter implements ResearchDataAdapter {
@@ -36,17 +41,45 @@ public class GitHubSkillAdapter implements ResearchDataAdapter {
     /** System property / config key holding the optional GitHub token. */
     public static final String TOKEN_PROPERTY = "researchmatch.github.token";
 
-    /** Offline mode reports at most this many skills, strongest first. */
+    /** Offline mode reports at most this many skills per handle, strongest first. */
     static final int MAX_OFFLINE_SKILLS = 3;
 
-    /** Languages the offline profile can report, most common first. */
-    static final List<String> OFFLINE_LANGUAGES = List.of("Java", "Python", "JavaScript", "TypeScript", "SQL");
+    /**
+     * Curated sample profiles used by offline mode, keyed by GitHub username. These are the only handles
+     * offline mode answers for; any other handle yields an empty list. Keys are matched case-insensitively.
+     *
+     * <p>The keys beginning {@code demo-} are the students seeded by {@code config/DataSeeder}, so "Import
+     * from GitHub" works on a fresh checkout. All of this is fictional sample data, labelled as such by
+     * {@link ImportedEvidence#asFixture}.
+     */
+    static final Map<String, List<ImportedEvidence>> OFFLINE_FIXTURES = Map.of(
+            "demo-mei-ling-ho", List.of(
+                    new ImportedEvidence("Python", "demo-mei-ling-ho/nlp-coursework",
+                            "tokeniser and POS-tagging exercises", 0.60),
+                    new ImportedEvidence("Jupyter Notebook", "demo-mei-ling-ho/text-mining-notes",
+                            "notebooks exploring text corpora", 0.40)),
+            "demo-arjun-patel", List.of(
+                    new ImportedEvidence("Python", "demo-arjun-patel/sklearn-practice",
+                            "model-training scripts with scikit-learn", 0.50),
+                    new ImportedEvidence("Pandas", "demo-arjun-patel/data-cleaning",
+                            "tabular data-cleaning pipelines", 0.33),
+                    new ImportedEvidence("HTML", "demo-arjun-patel/sklearn-practice",
+                            "generated report pages", 0.17)),
+            "demo-sze-wing-lau", List.of(
+                    new ImportedEvidence("Java", "demo-sze-wing-lau/vision-lab",
+                            "OpenCV wrapper written in Java", 0.67),
+                    new ImportedEvidence("C++", "demo-sze-wing-lau/opencv-sandbox",
+                            "image-filter experiments", 0.33)),
+            "octocat", List.of(
+                    new ImportedEvidence("JavaScript", "octocat/hello-world", "README greets a new world", 0.50),
+                    new ImportedEvidence("Ruby", "octocat/Spoon-Knife", "forked Git practice repository", 0.33),
+                    new ImportedEvidence("HTML", "octocat/octocat.github.io", "GitHub Pages site", 0.17)));
 
     private static final String GITHUB_API = "https://api.github.com";
 
     private final RestClient restClient;
 
-    /** Optional GitHub token; blank (the default) selects the deterministic offline mode. */
+    /** Optional GitHub token; blank (the default) selects the offline fixture mode. */
     @Value("${" + TOKEN_PROPERTY + ":}")
     private String token = "";
 
@@ -61,7 +94,7 @@ public class GitHubSkillAdapter implements ResearchDataAdapter {
     /**
      * Testable constructor.
      *
-     * @param token      GitHub token; null or blank selects the deterministic offline mode
+     * @param token      GitHub token; null or blank selects the offline fixture mode
      * @param restClient client used only when a token is present
      */
     public GitHubSkillAdapter(String token, RestClient restClient) {
@@ -81,7 +114,7 @@ public class GitHubSkillAdapter implements ResearchDataAdapter {
 
     /**
      * @param handle GitHub username
-     * @return never null; empty when the user has no public repositories
+     * @return never null; empty when the user has no public repositories (or, offline, has no fixture)
      * @throws InvalidRequestException if {@code handle} is blank
      * @throws ResearchMatchException  if a token is configured but the API call or payload fails
      */
@@ -97,44 +130,16 @@ public class GitHubSkillAdapter implements ResearchDataAdapter {
     // ------------------------------------------------------------------ offline mode
 
     /**
-     * Deterministic, network-free profile. The same handle always yields exactly the same evidence.
-     *
-     * <p>Rules: the handle's own name contributes any language it literally contains (so
-     * {@code java-wizard} reports Java), otherwise a stable hash picks how many languages to report. The
-     * confidence of the n-th reported skill strictly decreases, keeping the ordering meaningful.
+     * Returns the curated fixture for {@code username}, re-labelled as sample data, or an empty list when the
+     * handle has no fixture. Nothing is derived from the handle itself.
      */
     List<ImportedEvidence> offlineEvidence(String username) {
-        List<String> skills = new ArrayList<>();
-        String lower = username.toLowerCase(Locale.ROOT);
-        for (String language : OFFLINE_LANGUAGES) {
-            if (lower.contains(language.toLowerCase(Locale.ROOT))) {
-                skills.add(language);
-            }
-        }
-
-        int hash = Math.abs(username.hashCode());
-        int fallback = 1 + (hash % MAX_OFFLINE_SKILLS);
-        for (int i = 0; skills.size() < Math.max(fallback, 1) && i < OFFLINE_LANGUAGES.size(); i++) {
-            String language = OFFLINE_LANGUAGES.get(i);
-            if (!skills.contains(language)) {
-                skills.add(language);
-            }
-        }
-        if (hash % 7 == 0) {
-            skills.remove(0);
-        }
-
-        List<ImportedEvidence> evidence = new ArrayList<>(skills.size());
-        for (int i = 0; i < skills.size(); i++) {
-            String skill = skills.get(i);
-            double confidence = round(1.0 - (i * 0.2));
-            evidence.add(new ImportedEvidence(
-                    skill,
-                    username + "/" + skill.toLowerCase(Locale.ROOT) + "-samples",
-                    "Offline sample: public " + skill + " repositories owned by " + username,
-                    confidence));
-        }
-        return evidence;
+        Map<String, List<ImportedEvidence>> byLowerHandle = new LinkedHashMap<>();
+        OFFLINE_FIXTURES.forEach((handle, samples) -> byLowerHandle.put(handle.toLowerCase(Locale.ROOT), samples));
+        return ImportedEvidence.forHandle(byLowerHandle, username.toLowerCase(Locale.ROOT)).stream()
+                .limit(MAX_OFFLINE_SKILLS)
+                .map(ImportedEvidence::asFixture)
+                .toList();
     }
 
     private static double round(double value) {

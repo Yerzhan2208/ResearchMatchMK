@@ -128,6 +128,10 @@ public class ResearchMatchFacade {
     /**
      * Imports skills for a student from an external source through the matching adapter.
      *
+     * <p>Rows produced from sample data (an adapter with no live lookup) are persisted with
+     * {@code verifiedByStudent = false} and are <strong>not</strong> promoted into the student's
+     * {@code verifiedSkills}; only rows backed by a real lookup are promoted.
+     *
      * @param source a {@code ResearchDataAdapter.platformName()}, e.g. {@code "github"}
      * @param handle GitHub username or OpenAlex id
      * @return the persisted evidence rows, never null
@@ -143,12 +147,18 @@ public class ResearchMatchFacade {
         ResearchDataAdapter adapter = adapterRegistry.forSource(source)
                 .orElseThrow(() -> new InvalidRequestException("Unknown import source: " + source));
         List<ImportedEvidence> imported = adapter.importEvidence(handle.trim());
+        // Fixture entries (no live lookup) are sample data: stored so the demo shows something, flagged
+        // unverified, and never promoted into verifiedSkills below.
         List<SkillEvidence> persisted = skillEvidenceRepository.saveAll(toEvidence(student.getId(), imported));
 
-        // Promote imported skills to verified skills on the profile so matching can use them.
+        // Promote genuinely imported skills to verified skills on the profile so matching can use them.
         Set<String> verified = student.getVerifiedSkills() == null
                 ? new LinkedHashSet<>() : new LinkedHashSet<>(student.getVerifiedSkills());
-        persisted.stream().map(SkillEvidence::getSkillName).filter(s -> !isBlank(s)).forEach(verified::add);
+        persisted.stream()
+                .filter(SkillEvidence::isVerifiedByStudent)
+                .map(SkillEvidence::getSkillName)
+                .filter(s -> !isBlank(s))
+                .forEach(verified::add);
         student.setVerifiedSkills(verified);
         studentRepository.save(student);
         return persisted;
@@ -408,7 +418,7 @@ public class ResearchMatchFacade {
             row.setSkillName(evidence.skillName());
             row.setRepoName(evidence.sourceName());
             row.setEvidenceSnippet(evidence.evidenceSnippet());
-            row.setVerifiedByStudent(true);
+            row.setVerifiedByStudent(!evidence.isSampleData());
             rows.add(row);
         }
         return rows;

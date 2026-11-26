@@ -1,7 +1,10 @@
 package com.researchmatch.integration;
 
+import com.researchmatch.adapters.GitHubSkillAdapter;
+import com.researchmatch.config.AdapterRegistry;
 import com.researchmatch.config.IllegalStateTransitionException;
 import com.researchmatch.controllers.ResearchMatchFacade;
+import com.researchmatch.matching.MatchingEngine;
 import com.researchmatch.models.Application;
 import com.researchmatch.models.AuditEvent;
 import com.researchmatch.models.FacultyProfile;
@@ -9,10 +12,19 @@ import com.researchmatch.models.MatchResult;
 import com.researchmatch.models.Opportunity;
 import com.researchmatch.models.SkillEvidence;
 import com.researchmatch.models.StudentProfile;
+import com.researchmatch.pipeline.RecruitmentPipeline;
+import com.researchmatch.repository.ApplicationRepository;
 import com.researchmatch.repository.AuditEventRepository;
+import com.researchmatch.repository.FacultyRepository;
+import com.researchmatch.repository.OpportunityRepository;
+import com.researchmatch.repository.SkillEvidenceRepository;
+import com.researchmatch.repository.StudentRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
 
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -22,6 +34,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 /**
  * End-to-end and boundary-value tests (Member 5) that drive the whole system through the public
@@ -38,6 +52,38 @@ class EndToEndWorkflowTest {
 
     @Autowired
     private AuditEventRepository auditEventRepository;
+
+    // Collaborators needed to build a facade around a live (mocked-transport) adapter.
+    @Autowired
+    private StudentRepository studentRepository;
+    @Autowired
+    private FacultyRepository facultyRepository;
+    @Autowired
+    private OpportunityRepository opportunityRepository;
+    @Autowired
+    private ApplicationRepository applicationRepository;
+    @Autowired
+    private SkillEvidenceRepository skillEvidenceRepository;
+    @Autowired
+    private MatchingEngine matchingEngine;
+    @Autowired
+    private RecruitmentPipeline recruitmentPipeline;
+
+    /**
+     * A facade whose GitHub adapter does a real (mocked-transport) lookup, so imported evidence is genuine
+     * and therefore promoted to verified skills. The autowired {@code facade} runs the adapters in offline
+     * mode, whose results are sample data and deliberately never promoted.
+     */
+    private ResearchMatchFacade liveFacade(String username, String reposJson) {
+        RestClient.Builder builder = RestClient.builder().baseUrl("https://api.github.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("https://api.github.com/users/" + username + "/repos?per_page=100"))
+                .andRespond(withSuccess(reposJson, MediaType.APPLICATION_JSON));
+        GitHubSkillAdapter adapter = new GitHubSkillAdapter("ghp_test_token", builder.build());
+        return new ResearchMatchFacade(studentRepository, facultyRepository, opportunityRepository,
+                applicationRepository, skillEvidenceRepository, matchingEngine, recruitmentPipeline,
+                new AdapterRegistry(List.of(adapter)));
+    }
 
     private static String uniqueEmail(String prefix) {
         return prefix + "+" + UUID.randomUUID() + "@my.cityu.edu.hk";
@@ -85,11 +131,18 @@ class EndToEndWorkflowTest {
         FacultyProfile faculty = newFaculty();
         Opportunity opportunity = newOpportunity(faculty.getId(), 8, 1, true, Set.of("Python"));
 
-        // 1. Import GitHub skills (deterministic offline adapter; handle contains "java" -> Java).
-        List<SkillEvidence> imported = facade.importSkills(student.getId(), "github", "java-wizard");
+        // 1. Import GitHub skills through a live lookup: 2 of 4 repositories are Java, so confidence 0.50.
+        ResearchMatchFacade live = liveFacade("live-java-dev", """
+                [{"name":"svc-a","language":"Java","topics":["spring"]},
+                 {"name":"svc-b","language":"Java","topics":[]},
+                 {"name":"web","language":"JavaScript","topics":[]},
+                 {"name":"notes","language":"Python","topics":[]}]
+                """);
+        List<SkillEvidence> imported = live.importSkills(student.getId(), "github", "live-java-dev");
         assertThat(imported).isNotEmpty();
         assertThat(imported).allSatisfy(row -> {
             assertThat(row.getStudentId()).isEqualTo(student.getId());
+            // Real evidence, not sample data: verified and eligible for promotion.
             assertThat(row.isVerifiedByStudent()).isTrue();
         });
         List<String> skillNames = imported.stream().map(SkillEvidence::getSkillName).toList();
