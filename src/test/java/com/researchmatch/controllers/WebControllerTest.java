@@ -53,6 +53,7 @@ class WebControllerTest {
         resolver.setSuffix(".html");
         mvc = MockMvcBuilders.standaloneSetup(controller)
                 .setViewResolvers(resolver)
+                .setControllerAdvice(new MvcErrorAdvice())
                 .build();
     }
 
@@ -560,4 +561,63 @@ class WebControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    // ---------------------------------------------------------------- error advice
+
+    @Test
+    void profileSurfacesUnexpectedFacadeFailureAs500() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.evidenceFor(7L)).thenThrow(new RuntimeException("boom"));
+
+        mvc.perform(get("/profile"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(view().name("error"))
+                .andExpect(model().attribute("status", 500))
+                .andExpect(model().attribute("message", "An unexpected error occurred."));
+    }
+
+    @Test
+    void discoverSurfacesApplicationsLookupFailureAs500() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.recommend(eq(7L), any())).thenReturn(List.of());
+        when(facade.applicationsForStudent(7L)).thenThrow(new RuntimeException("db down"));
+
+        mvc.perform(get("/discover"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(view().name("error"));
+    }
+
+    @Test
+    void professorSurfacesOpportunitiesLookupFailureAs500() throws Exception {
+        when(session.currentFaculty()).thenReturn(faculty());
+        when(facade.opportunitiesForFaculty(3L)).thenThrow(new RuntimeException("boom"));
+
+        mvc.perform(get("/professor"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(view().name("error"));
+    }
+
+    @Test
+    void profileDomainExceptionRenders404() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.evidenceFor(7L)).thenReturn(List.of());
+        when(facade.importSources()).thenThrow(new ResourceNotFoundException("nope"));
+
+        mvc.perform(get("/profile"))
+                .andExpect(status().isNotFound())
+                .andExpect(view().name("error"))
+                .andExpect(model().attribute("status", 404))
+                .andExpect(model().attribute("message", "nope"));
+    }
+
+    @Test
+    void profileInvalidRequestRenders400() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.evidenceFor(7L)).thenReturn(List.of());
+        when(facade.importSources()).thenThrow(new InvalidRequestException("bad"));
+
+        mvc.perform(get("/profile"))
+                .andExpect(status().isBadRequest())
+                .andExpect(view().name("error"))
+                .andExpect(model().attribute("message", "bad"));
+    }
 }
