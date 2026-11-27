@@ -3,18 +3,24 @@ package com.researchmatch.matching;
 import com.researchmatch.models.MatchResult;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
- * Favours beginner-friendly opportunities and lower hours-per-week commitments.
- *
- * <p>TODO (Member 2): implement {@link #rank(List)}. Needs the {@code Opportunity} behind each result and a
- * {@code MatchResult -> Opportunity} lookup; extend the constructor with the repository you need.
+ * Favours beginner-friendly opportunities; the engine pre-filters to beginner-friendly candidates before
+ * ranking. Within the filtered set it ranks by {@code totalScore} descending, then ascending
+ * {@code opportunityId}. Returns a new list and never mutates the input.
  */
 @Component("beginnerFriendlyStrategy")
 public class BeginnerFriendlyStrategy implements RankingStrategy {
 
     public static final String NAME = "beginner-friendly";
+
+    static final Comparator<MatchResult> ORDER =
+            Comparator.comparingDouble(MatchResult::getTotalScore).reversed()
+                    .thenComparing(MatchResult::getOpportunityId,
+                            Comparator.nullsLast(Comparator.naturalOrder()));
 
     @Override
     public String name() {
@@ -23,6 +29,11 @@ public class BeginnerFriendlyStrategy implements RankingStrategy {
 
     @Override
     public List<MatchResult> rank(List<MatchResult> results) {
-        throw new UnsupportedOperationException("TODO (Member 2): BeginnerFriendlyStrategy.rank");
+        if (results == null || results.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<MatchResult> ranked = new ArrayList<>(results);
+        ranked.sort(ORDER);
+        return ranked;
     }
 }

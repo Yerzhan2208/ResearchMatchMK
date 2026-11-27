@@ -52,14 +52,30 @@ public class Opportunity {
 
     private Integer maxApplicants;
 
+    /**
+     * Minimum academic year a candidate must have reached, e.g. {@code 1} = open to all undergraduates,
+     * {@code 2} = second-year and above. Defaults to {@code 1} so existing callers stay eligible-compatible.
+     */
+    private Integer minAcademicYear = 1;
+
     public Opportunity() {
     }
 
     public Opportunity(Long id, Long facultyId, String title, String description) {
+        this(id, facultyId, title, description, 1);
+    }
+
+    /**
+     * Overload that also sets the minimum academic year.
+     *
+     * @param minAcademicYear required student academic year; null is treated as {@code 1}
+     */
+    public Opportunity(Long id, Long facultyId, String title, String description, Integer minAcademicYear) {
         this.id = id;
         this.facultyId = facultyId;
         this.title = title;
         this.description = description;
+        this.minAcademicYear = minAcademicYear == null ? 1 : minAcademicYear;
     }
 
     public Long getId() {
@@ -140,6 +156,15 @@ public class Opportunity {
 
     public void setMaxApplicants(Integer maxApplicants) {
         this.maxApplicants = maxApplicants;
+    }
+
+    public Integer getMinAcademicYear() {
+        return minAcademicYear;
+    }
+
+    /** null is normalised to {@code 1} (open to all undergraduates). */
+    public void setMinAcademicYear(Integer minAcademicYear) {
+        this.minAcademicYear = minAcademicYear == null ? 1 : minAcademicYear;
     }
 
     @Override

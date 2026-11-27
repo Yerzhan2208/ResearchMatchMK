@@ -6,6 +6,10 @@ These rules are **binding for every future OpenCode session** (and any AI or hum
 Read this file fully, plus [`docs/integration-contracts.md`](docs/integration-contracts.md), before changing
 anything. If a task conflicts with these files, stop and ask.
 
+Session hand-off notes live in [`agent-notes/`](agent-notes/) (one Markdown file per task, see its
+[README](agent-notes/README.md)); add a note there at the end of each task. Coverage can be inspected with
+`scripts/coverage.sh` (macOS/Linux) or `scripts\coverage.bat` (Windows) — see §5.
+
 ---
 
 ## 1. Tech stack (non-negotiable)
@@ -71,7 +75,24 @@ fix a compile error. Report it instead.
    `pipeline/`, orchestration in `controllers/`.
 6. `controllers/` may import `matching/`, `pipeline/`, `adapters/`, `models/`, `repository/`, `config/`.
    `matching/`, `pipeline/`, `adapters/`, `factory/` must **never** import `controllers/`.
-7. Keep commits scoped to your folder; one task per PR.
+7. **Commit incrementally as you work — do not batch a whole task into one final commit.** After each
+   complete, verified step (a merge, a passing test suite, a coverage milestone, a tooling change, …), make
+   a small, scoped commit so no progress is ever lost. Each commit should leave the build green; never
+   commit secrets, and do not push unless asked. One task per PR.
+8. **Use Conventional Commits for the message subject:** `<type>[scope]: <subject>`, optionally followed by a
+   body and footer(s):
+
+   ```
+   <type>[scope]: <subject>
+
+   [optional body]
+
+   [optional footer(s)]
+   ```
+
+   Common `<type>`s: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `build`, `ci`. Keep the subject
+   imperative and under ~72 characters; use the body for *why*, and footers for things like
+   `Co-authored-by:` or `Refs:`.
 
 ---
 
@@ -91,6 +112,7 @@ the DB column (`nullable = false`).
 
 - Every feature PR **MUST include JUnit 5 tests**; new/changed code must keep the bundle at
   **≥ 85 % branch coverage** (`mvn verify` enforces it).
+- The project must maintain **100 % line coverage with no exceptions**; strive for **100 % branch coverage**, keeping the existing **≥ 85 %** gate as the enforced minimum.
 - Tests mirror main packages: `matching/X.java` → `src/test/java/com/researchmatch/matching/XTest.java`.
 - Each member owns the tests for their components. **Member 5** owns end-to-end integration tests
   (`src/test/java/com/researchmatch/integration/`) and coordinates coverage improvements — coordinate
@@ -98,6 +120,11 @@ the DB column (`nullable = false`).
 - Use Mockito for collaborators; use `@SpringBootTest` only for wiring/integration.
 - `ApplicationContextTest` is the baseline wiring check: if it fails, the branch does not integrate.
 - `config/DataSeeder` runs on startup, so the test DB is **not empty**. Do not assert `count() == 0`.
+- View coverage any time with **`scripts/coverage.sh`** (macOS/Linux) or **`scripts\coverage.bat`**
+  (Windows); both wrap `scripts/coverage.py`. It prints overall line/branch % with PASS/FAIL, a per-class
+  gap table, `--html` for a dashboard and `--open` for the JaCoCo HTML report. New code that lacks tests
+  shows up as a `gap` row. Gap rows are **informational**: the exit code is 0 when the gated counters pass,
+  and only `--fail-line`/`--fail-branch` make it fail. The `.sh` wrappers need bash (WSL or Git Bash).
 
 ---
 

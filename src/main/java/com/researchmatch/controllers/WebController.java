@@ -214,19 +214,28 @@ public class WebController {
         return "redirect:/profile";
     }
 
+    /**
+     * Imports skills for the current demo student. The handle is no longer typed in the UI: it is taken from
+     * the student's own saved profile, so a student can only import evidence for an account they own.
+     */
     @PostMapping("/profile/import")
     public String importSkills(@RequestParam(value = "source", required = false) String source,
-                               @RequestParam(value = "handle", required = false) String handle,
                                RedirectAttributes redirect) {
         StudentProfile student = session.currentStudent();
         if (student == null) {
             redirect.addFlashAttribute("errorMessage", "No demo student is available for import.");
             return "redirect:/profile";
         }
+        String handle = student.getGithubUsername();
+        if (handle == null || handle.isBlank()) {
+            redirect.addFlashAttribute("infoMessage",
+                    "Save a GitHub username on your profile before importing skills.");
+            return "redirect:/profile";
+        }
         try {
             List<SkillEvidence> imported = facade.importSkills(student.getId(), source, handle);
             if (imported.isEmpty()) {
-                redirect.addFlashAttribute("infoMessage", "No skills were found for that handle.");
+                redirect.addFlashAttribute("infoMessage", "No skills were found for " + handle + ".");
             } else {
                 redirect.addFlashAttribute("successMessage", imported.size() + " skill(s) imported.");
             }

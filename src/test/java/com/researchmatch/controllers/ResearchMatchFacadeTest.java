@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -215,6 +216,60 @@ class ResearchMatchFacadeTest {
     }
 
     @Test
+    void importSkillsKeepsSampleDataUnverifiedAndOutOfVerifiedSkills() {
+        ResearchDataAdapter offline = new GitHubSkillAdapter("", null);
+        ResearchMatchFacade custom = new ResearchMatchFacade(studentRepository, facultyRepository,
+                opportunityRepository, applicationRepository, skillEvidenceRepository, matchingEngine,
+                recruitmentPipeline, new AdapterRegistry(List.of(offline)));
+
+        when(studentRepository.findById(7L)).thenReturn(Optional.of(student()));
+        when(skillEvidenceRepository.saveAll(anyList())).thenAnswer(i -> i.getArgument(0));
+        when(studentRepository.save(any(StudentProfile.class))).thenAnswer(i -> i.getArgument(0));
+
+        List<SkillEvidence> imported = custom.importSkills(7L, "github", "demo-mei-ling-ho");
+
+        // The demo path works with no token...
+        assertThat(imported).extracting(SkillEvidence::getSkillName).containsExactly("Python", "Jupyter Notebook");
+        // ...but the rows are flagged, not presented as verified evidence...
+        assertThat(imported).noneMatch(SkillEvidence::isVerifiedByStudent);
+        assertThat(imported).allSatisfy(
+                row -> assertThat(row.getRepoName()).startsWith(ResearchDataAdapter.FIXTURE_SOURCE_PREFIX));
+        // ...and they never become verified skills on the profile.
+        ArgumentCaptor<StudentProfile> captor = ArgumentCaptor.forClass(StudentProfile.class);
+        verify(studentRepository).save(captor.capture());
+        assertThat(captor.getValue().getVerifiedSkills()).doesNotContain("Python", "Jupyter Notebook");
+    }
+
+    @Test
+    void importSkillsMergesIntoExistingVerifiedSkillsAndSkipsBlankNames() {
+        // A preexisting verified skill survives; a blank-named live row must not create a verified entry.
+        StudentProfile existing = student();
+        existing.setVerifiedSkills(new java.util.LinkedHashSet<>(List.of("Figma")));
+        ResearchDataAdapter adapter = Mockito.mock(ResearchDataAdapter.class);
+        when(adapter.platformName()).thenReturn("github");
+        when(adapter.importEvidence("live")).thenReturn(List.of(
+                new ImportedEvidence("Java", "repo-a", "snippet", 0.9),
+                new ImportedEvidence("Spring", "repo-b", "snippet", 0.8)));
+        ResearchMatchFacade custom = new ResearchMatchFacade(studentRepository, facultyRepository,
+                opportunityRepository, applicationRepository, skillEvidenceRepository, matchingEngine,
+                recruitmentPipeline, new AdapterRegistry(List.of(adapter)));
+        when(studentRepository.findById(7L)).thenReturn(Optional.of(existing));
+        when(skillEvidenceRepository.saveAll(anyList())).thenAnswer(i -> {
+            @SuppressWarnings("unchecked")
+            List<SkillEvidence> rows = new ArrayList<>((List<SkillEvidence>) i.getArgument(0));
+            rows.add(new SkillEvidence(null, 7L, "  ", "repo-c", "blank name"));   // blank must be skipped
+            return rows;
+        });
+        when(studentRepository.save(any(StudentProfile.class))).thenAnswer(i -> i.getArgument(0));
+
+        custom.importSkills(7L, "github", "live");
+
+        ArgumentCaptor<StudentProfile> captor = ArgumentCaptor.forClass(StudentProfile.class);
+        verify(studentRepository).save(captor.capture());
+        assertThat(captor.getValue().getVerifiedSkills()).containsExactly("Figma", "Java", "Spring");
+    }
+
+    @Test
     void importSkillsRejectsUnknownSourceAndBlankHandle() {
         when(studentRepository.findById(7L)).thenReturn(Optional.of(student()));
 
@@ -249,15 +304,12 @@ class ResearchMatchFacadeTest {
     }
 
     @Test
-    void toEvidenceHandlesNullAndEmptyInputs() {
-        assertThat(facade.toEvidence(7L, null)).isEmpty();
-        assertThat(facade.toEvidence(7L, List.of())).isEmpty();
+    void toEvidenceMarksFixtureSourcesUnverified() {
         SkillEvidence row = facade.toEvidence(7L,
-                List.of(new ImportedEvidence("Java", "repo", "snip", 0.5))).get(0);
-        assertThat(row.getStudentId()).isEqualTo(7L);
-        assertThat(row.getSkillName()).isEqualTo("Java");
-        assertThat(row.getRepoName()).isEqualTo("repo");
-        assertThat(row.isVerifiedByStudent()).isTrue();
+                List.of(new ImportedEvidence("Java", ResearchDataAdapter.FIXTURE_SOURCE_PREFIX + "demo/x",
+                        ResearchDataAdapter.OFFLINE_SNIPPET_PREFIX + "sample", 0.5))).get(0);
+
+        assertThat(row.isVerifiedByStudent()).isFalse();
     }
 
     // ---------------------------------------------------------------- opportunities + faculty

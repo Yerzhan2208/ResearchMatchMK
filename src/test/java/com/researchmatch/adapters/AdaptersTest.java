@@ -31,24 +31,34 @@ class AdaptersTest {
 
     @Test
     void adaptersExposeTheirPlatformName() {
-        assertThat(new GitHubSkillAdapter().platformName()).isEqualTo(GitHubSkillAdapter.PLATFORM);
-        assertThat(new OpenAlexPublicationAdapter().platformName()).isEqualTo(OpenAlexPublicationAdapter.PLATFORM);
+        assertThat(new GitHubSkillAdapter(null, null).platformName()).isEqualTo(GitHubSkillAdapter.PLATFORM);
+        assertThat(new OpenAlexPublicationAdapter(false, null, null).platformName())
+                .isEqualTo(OpenAlexPublicationAdapter.PLATFORM);
     }
 
     @Test
-    void adapterImportsAreExplicitTodos() {
-        assertThatThrownBy(() -> new GitHubSkillAdapter().importEvidence("octocat"))
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessageContaining("GitHubSkillAdapter");
-        assertThatThrownBy(() -> new OpenAlexPublicationAdapter().importEvidence("A123"))
-                .isInstanceOf(UnsupportedOperationException.class)
-                .hasMessageContaining("OpenAlexPublicationAdapter");
+    void adaptersImportWithoutNetworkAndRejectBlankHandles() {
+        List<ImportedEvidence> github = new GitHubSkillAdapter("  ", null)
+                .importEvidence("demo-mei-ling-ho");
+        assertThat(github).isNotEmpty().allSatisfy(e -> assertThat(e.isSampleData()).isTrue());
+
+        OpenAlexPublicationAdapter openAlex = new OpenAlexPublicationAdapter(false, null, null);
+        assertThatThrownBy(() -> openAlex.importEvidence("  "))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    void importedEvidenceKnowsWhetherItIsSampleData() {
+        assertThat(new ImportedEvidence("Java", "octocat/repo", "snippet", 0.5).isSampleData()).isFalse();
+        assertThat(new ImportedEvidence("Java", ResearchDataAdapter.FIXTURE_SOURCE_PREFIX + "octocat/repo",
+                "snippet", 0.5).isSampleData()).isTrue();
+        assertThat(new ImportedEvidence("Java", null, null, 0.5).isSampleData()).isFalse();
     }
 
     @Test
     void registryResolvesAdaptersCaseInsensitively() {
         ResearchDataSourceRegistry registry = new AdapterRegistry(
-                List.of(new GitHubSkillAdapter(), new OpenAlexPublicationAdapter()));
+                List.of(new GitHubSkillAdapter(null, null), new OpenAlexPublicationAdapter(false, null, null)));
 
         assertThat(registry.forSource("github")).get().isInstanceOf(GitHubSkillAdapter.class);
         assertThat(registry.forSource("  OpenAlex ")).get().isInstanceOf(OpenAlexPublicationAdapter.class);
@@ -67,7 +77,7 @@ class AdaptersTest {
 
     @Test
     void registrySnapshotsItsSources() {
-        List<ResearchDataAdapter> mutable = new java.util.ArrayList<>(List.of(new GitHubSkillAdapter()));
+        List<ResearchDataAdapter> mutable = new java.util.ArrayList<>(List.of(new GitHubSkillAdapter(null, null)));
         AdapterRegistry registry = new AdapterRegistry(mutable);
         mutable.clear();
 

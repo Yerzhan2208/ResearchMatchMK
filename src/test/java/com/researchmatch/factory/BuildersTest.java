@@ -65,6 +65,7 @@ class BuildersTest {
                 .compensationType("CREDIT")
                 .beginnerFriendly(true)
                 .maxApplicants(2)
+                .minAcademicYear(2)
                 .build();
 
         assertThat(opportunity.getFacultyId()).isEqualTo(9L);
@@ -76,6 +77,24 @@ class BuildersTest {
         assertThat(opportunity.getCompensationType()).isEqualTo("CREDIT");
         assertThat(opportunity.isBeginnerFriendly()).isTrue();
         assertThat(opportunity.getMaxApplicants()).isEqualTo(2);
+        assertThat(opportunity.getMinAcademicYear()).isEqualTo(2);
+    }
+
+    @Test
+    void opportunityBuilderDefaultsMinAcademicYearToOne() {
+        Opportunity omitted = new OpportunityBuilder().facultyId(1L).title("t").build();
+        assertThat(omitted.getMinAcademicYear()).isEqualTo(1);
+
+        Opportunity nullArgument = new OpportunityBuilder().facultyId(1L).title("t").minAcademicYear(null).build();
+        assertThat(nullArgument.getMinAcademicYear()).isEqualTo(1);
+    }
+
+    @Test
+    void opportunityBuilderRejectsMinAcademicYearOutsideRange() {
+        assertThatThrownBy(() -> new OpportunityBuilder().facultyId(1L).title("t").minAcademicYear(0).build())
+                .isInstanceOf(InvalidRequestException.class).hasMessageContaining("minAcademicYear");
+        assertThatThrownBy(() -> new OpportunityBuilder().facultyId(1L).title("t").minAcademicYear(5).build())
+                .isInstanceOf(InvalidRequestException.class).hasMessageContaining("minAcademicYear");
     }
 
     @Test

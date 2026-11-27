@@ -81,13 +81,39 @@ All ids are `Long`. All collections are initialised non-null. All entities use i
 | --- | --- |
 | `StudentProfile` | `id, name, email, major, academicYear, hoursPerWeek, interests, claimedSkills, verifiedSkills, githubUsername, searchableByFaculty` |
 | `FacultyProfile` | `id, name, department, researchAreas, openAlexId` |
-| `Opportunity` | `id, facultyId, title, description, requiredSkills, preferredSkills, hoursPerWeek, compensationType, beginnerFriendly, maxApplicants` |
+| `Opportunity` | `id, facultyId, title, description, requiredSkills, preferredSkills, hoursPerWeek, compensationType, beginnerFriendly, maxApplicants, minAcademicYear` |
 | `Application` | `id, studentId, opportunityId, status, statement, evidenceLinks, notes, updatedAt` (`updatedAt` auto-stamped on save) |
 | `SkillEvidence` | `id, studentId, skillName, repoName, evidenceSnippet, verifiedByStudent` |
 | `MatchResult` | `id, studentId, opportunityId, totalScore, eligible, matchedSkills, missingSkills, explanationSummary, recommendedPrep` |
 | `AuditEvent` | `id, entityId, action, details, timestamp` (auto-stamped) |
 
 `Application.Status`: `NEW, SHORTLISTED, INTERVIEW, ACCEPTED, REJECTED` (stored as `STRING`).
+
+### Academic-year fields (eligibility input)
+
+| Field | Type | Range / default | Notes |
+| --- | --- | --- | --- |
+| `StudentProfile.academicYear` | `Integer` | `1`–`4`; may be `null` if unfilled | Constant bounds: `StudentProfile.MIN_ACADEMIC_YEAR` / `MAX_ACADEMIC_YEAR`. |
+| `Opportunity.minAcademicYear` | `Integer` | `1`–`4`; **defaults to `1`** (open to all undergraduates) | `setMinAcademicYear(null)` normalises to `1`. |
+
+`Opportunity` constructors (the 4-arg form is unchanged — it now delegates with `minAcademicYear = 1`):
+
+```java
+new Opportunity();                                                        // minAcademicYear = 1
+new Opportunity(Long id, Long facultyId, String title, String description);          // minAcademicYear = 1
+new Opportunity(Long id, Long facultyId, String title, String description, Integer minAcademicYear);
+Integer getMinAcademicYear();  void setMinAcademicYear(Integer);          // null ⇒ 1
+```
+
+**Layer 1 eligibility rule (Member 2, `EligibilityFilterHandler`).** A candidate must be rejected when:
+
+```java
+opportunity.getMinAcademicYear() != null
+    && (student.getAcademicYear() == null || student.getAcademicYear() < opportunity.getMinAcademicYear())
+```
+
+On rejection: `context.markIneligible(...)` with a note naming the required/actual year, and return
+`MatchLayerHandler.LayerResult.STOP`.
 
 **Privacy rule:** `StudentProfile.searchableByFaculty` is `false` by default and `nullable = false` in the DB.
 
@@ -174,8 +200,8 @@ public interface RankingStrategy {
 
 ```java
 MatchingEngine(StudentRepository, OpportunityRepository, SystemConfigManager, List<RankingStrategy>);
-MatchResult evaluate(Long studentId, Long opportunityId);
-List<MatchResult> rankOpportunities(Long studentId, String strategyName);
+MatchResult evaluate(Long studentId, Long opportunityId);        // ← IMPLEMENTED
+List<MatchResult> rankOpportunities(Long studentId, String strategyName);   // ← IMPLEMENTED
 RankingStrategy strategy(String strategyName);        // ← IMPLEMENTED (null/blank ⇒ balanced)
 // accessors: getStudentRepository(), getOpportunityRepository(), getConfig(); protected newContext(...)
 ```
@@ -204,21 +230,40 @@ new OpportunityBuilder()
         .requiredSkills(Collection<String>).preferredSkills(Collection<String>)
         .hoursPerWeek(Integer).compensationType(String)
         .beginnerFriendly(boolean).maxApplicants(Integer)
+        .minAcademicYear(Integer)                  // optional; null ⇒ 1
         .build();                                  // InvalidRequestException on bad input
 ```
 
-`build()` rejects: null `facultyId`; null/blank `title`; `hoursPerWeek <= 0`; `maxApplicants <= 0`.
+`build()` rejects: null `facultyId`; null/blank `title`; `hoursPerWeek <= 0`; `maxApplicants <= 0`;
+`minAcademicYear` outside `1`–`4`.
 
 ### Adapters
 
 ```java
 public interface ResearchDataAdapter {
+    String OFFLINE_SNIPPET_PREFIX = "Offline fixture (sample data, not fetched): ";
     String platformName();                              // "github", "openalex"
     List<ImportedEvidence> importEvidence(String handle); // never null; empty ⇒ nothing found
 }
 public record ImportedEvidence(String skillName, String sourceName, String evidenceSnippet, double confidence)
         // skillName non-blank, confidence ∈ [0,1], else IllegalArgumentException
 ```
+
+**Offline mode (no token / OpenAlex disabled).** Both adapters answer only for a small curated fixture map of
+known handles; **every other handle yields an empty list**, which the interface already defines as "nothing
+found". No evidence is ever derived from the handle's spelling or hash.
+
+Offline results are labelled as sample data: `sourceName` is prefixed with `FIXTURE_SOURCE_PREFIX`
+(`fixture:`), `evidenceSnippet` with `OFFLINE_SNIPPET_PREFIX`, and `ImportedEvidence#isSampleData()` reports
+it. `ResearchMatchFacade#importSkills` therefore stores sample rows with `verifiedByStudent = false` and
+**never** promotes them into `StudentProfile.verifiedSkills` — only live-lookup rows become verified skills.
+The profile page shows the unverified state, and matching does not treat sample data as established skills.
+
+The fixture keys are the handles the demo actually uses: the seeded students (`demo-mei-ling-ho`,
+`demo-arjun-patel`, `demo-sze-wing-lau`) and the seeded faculty OpenAlex id (`A2RRCMK3ZDBF7`, Prof. Wei Chan,
+whose fixture areas mirror `DataSeeder`). So "Import from GitHub / OpenAlex" works on a fresh checkout with
+no token, and the data is visibly marked fictional. `octocat` is kept because it is a real account whose
+sample reads correctly; the fixture ids are otherwise ours, not real OpenAlex records.
 
 Lookup (used by the facade): `ResearchDataSourceRegistry` (interface) + `AdapterRegistry` (bean).
 
@@ -278,7 +323,8 @@ back a transition. An observer must be idempotent.
 ### `RecruitmentPipeline` (Spring `@Service`)
 
 ```java
-RecruitmentPipeline(ApplicationRepository, OpportunityRepository, ApplicationStateFactory, ApplicationSubject);
+RecruitmentPipeline(ApplicationRepository, OpportunityRepository, StudentRepository,
+                    ApplicationStateFactory, ApplicationSubject);
 Application submit(Long studentId, Long opportunityId, String statement);  // status NEW, notifies
 Application shortlist(Long applicationId);
 Application scheduleInterview(Long applicationId);
@@ -291,10 +337,41 @@ Every method returns the persisted entity (non-null) and throws `ResourceNotFoun
 and `IllegalStateTransitionException` for a disallowed move. Exactly one `notifyStatusChanged` per successful
 transition.
 
+`StudentRepository` is a constructor dependency because `submit` verifies the student exists before creating
+an application; no other collaborator in this graph can answer that query.
+
+`submit` additionally throws `InvalidRequestException` when:
+
+- either id is null;
+- the statement exceeds `RecruitmentPipeline.MAX_STATEMENT_LENGTH` (4000) characters;
+- **the student already applied to that opportunity.**
+
+**Duplicate-application rule (one application per `(studentId, opportunityId)` pair).** The rule was
+previously stated only in `ResearchMatchFacade#submitApplication` (Member 4), whose javadoc attributes it to
+this service; it is documented here so both members agree on a single owner. Rationale:
+
+- `Application` carries one `status`, so two live rows for the same pair could sit in different states and
+  make "accept" ambiguous.
+- `maxApplicants` is measured by `countByOpportunityIdAndStatus`, which a duplicate would inflate.
+- Rejecting the request keeps the failure loud instead of silently creating a second row.
+
+The check is implemented over `ApplicationRepository#findByStudentId`; it is linear in the student's
+application count. A dedicated finder would be preferable but requires a change to a FROZEN repository.
+
 ### DataSeeder (Spring bean, `CommandLineRunner`)
 
-`config/DataSeeder` inserts one faculty member and two opportunities **only when `opportunityRepository.count() == 0`**.
-`ApplicationContextTest` therefore asserts `opportunityRepository.count() > 0` — never assume an empty DB.
+`config/DataSeeder` seeds three CityUHK faculty members, six opportunities and four students **only when
+`opportunityRepository.count() == 0`**, so seeding is idempotent and `ApplicationContextTest` can assert
+`opportunityRepository.count() > 0` — never assume an empty DB. Its constructor takes
+`(FacultyRepository, OpportunityRepository, StudentRepository)`; the student repository is used solely to
+seed sample students. Seeded students keep `searchableByFaculty = false`.
+
+Seeded handles are chosen to work offline: the students' GitHub usernames are `demo-mei-ling-ho`,
+`demo-arjun-patel`, `demo-sze-wing-lau` (matching the GitHub fixtures) and Prof. Wei Chan's OpenAlex id is
+`A2RRCMK3ZDBF7` (matching the OpenAlex fixture that mirrors his research areas). The other two faculty have no
+OpenAlex id — a null id is valid and simply means no publication import. All of this identity data is
+fictional: the `demo-` prefix on student handles, and an OpenAlex id that is ours rather than a real record,
+are deliberate markers. The app never contacts GitHub or OpenAlex to verify them.
 
 ---
 
@@ -310,6 +387,7 @@ StudentProfile getStudent(Long);                         // ResourceNotFoundExce
 StudentProfile saveStudent(StudentProfile);              // InvalidRequest / DuplicateEntity
 // skills
 List<SkillEvidence> importSkills(Long studentId, String source, String handle);
+    // sample-data rows: verifiedByStudent = false, never added to StudentProfile.verifiedSkills
 List<SkillEvidence> evidenceFor(Long studentId);
 // opportunities
 Opportunity getOpportunity(Long);
@@ -374,6 +452,7 @@ subject.notifyStatusChanged(app, from, app.getStatus());
 Opportunity opportunity = new OpportunityBuilder()
         .facultyId(facultyId).title("NLP for course feedback")
         .requiredSkills(Set.of("Java")).beginnerFriendly(true).maxApplicants(3)
+        .minAcademicYear(2)                       // second-year and above
         .build();
 facade.saveOpportunity(opportunity);
 List<StudentProfile> candidates = facade.discoverCandidates(facultyId);   // privacy-filtered
@@ -427,6 +506,8 @@ Circular dependency risk: none. `models`/`repository` ← everyone; `matching` �
 | Date | Change | Approved by |
 | --- | --- | --- |
 | baseline | Initial contracts (this file) | Member 1 |
+| schema-1 | Added `Opportunity.minAcademicYear` (default `1`, 4-arg constructor preserved) + `OpportunityBuilder.minAcademicYear(Integer)`; documented `StudentProfile.academicYear` (1–4) and the Layer 1 eligibility rule | Member 1 |
+| adapters-1 | Offline mode narrowed to a curated fixture map: unknown handles/author ids return empty instead of hash-derived fabricated evidence; added `ResearchDataAdapter.OFFLINE_SNIPPET_PREFIX` / `FIXTURE_SOURCE_PREFIX` and `ImportedEvidence#isSampleData()` so sample data is visibly labelled; fixture keys aligned with `DataSeeder` (seeded students + Prof. Wei Chan's OpenAlex id, areas mirrored) and unused invented ids dropped. **`ResearchMatchFacade#importSkills` no longer promotes sample-data rows into `verifiedSkills`** (Member 4's file, changed with the group's agreement that fixture data must not become a verified credential) | Member 3, **pending group ratification** |
 
 ---
 

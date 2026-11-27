@@ -90,7 +90,7 @@ public class DemoRoleSession {
         student.setMajor("Computer Science");
         student.setAcademicYear(3);
         student.setHoursPerWeek(10);
-        student.setGithubUsername("octocat");
+        student.setGithubUsername("demo-mei-ling-ho");
         // Privacy rule: the entity default (false) is intentionally left untouched.
         return studentRepository.save(student);
     }

@@ -24,6 +24,12 @@ import java.util.Set;
 @Table(name = "student_profiles")
 public class StudentProfile {
 
+    /** Lowest undergraduate academic year. */
+    public static final int MIN_ACADEMIC_YEAR = 1;
+
+    /** Highest undergraduate academic year. */
+    public static final int MAX_ACADEMIC_YEAR = 4;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -36,7 +42,10 @@ public class StudentProfile {
 
     private String major;
 
-    /** Academic year of study, e.g. 3. */
+    /**
+     * Academic year of study, 1–4 (see {@link #MIN_ACADEMIC_YEAR} / {@link #MAX_ACADEMIC_YEAR}).
+     * May be null for a profile that has not been filled in yet.
+     */
     private Integer academicYear;
 
     private Integer hoursPerWeek;
