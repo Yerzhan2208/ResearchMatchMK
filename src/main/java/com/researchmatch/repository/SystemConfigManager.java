@@ -32,6 +32,7 @@ public class SystemConfigManager {
     public static final String KEY_MIN_BRANCH_COVERAGE = "coverage.minBranch";
     public static final String KEY_MAX_MATCH_RESULTS = "matching.maxResults";
     public static final String KEY_SEMANTIC_WEIGHT = "matching.semanticWeight";
+    public static final String KEY_EVIDENCE_WEIGHT = "matching.evidenceWeight";
     public static final String KEY_ALLOW_FACULTY_SEARCH = "privacy.allowFacultySearch";
 
     /**
@@ -54,7 +55,8 @@ public class SystemConfigManager {
         Map<String, String> defaults = new HashMap<>();
         defaults.put(KEY_MIN_BRANCH_COVERAGE, "0.85");
         defaults.put(KEY_MAX_MATCH_RESULTS, "20");
-        defaults.put(KEY_SEMANTIC_WEIGHT, "0.30");
+        defaults.put(KEY_SEMANTIC_WEIGHT, "0.70");
+        defaults.put(KEY_EVIDENCE_WEIGHT, "0.30");
         defaults.put(KEY_ALLOW_FACULTY_SEARCH, "false");
         return Collections.unmodifiableMap(defaults);
     }

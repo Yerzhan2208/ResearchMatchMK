@@ -27,7 +27,11 @@ public class SemanticMatchHandler extends AbstractMatchLayerHandler {
 
     public static final String LAYER = "semantic";
 
-    static final double DEFAULT_SEMANTIC_WEIGHT = 0.30;
+    /**
+     * Default semantic weight, kept for tests and documentation. The authoritative pairing/validation lives
+     * in {@link ScoringWeights}; the semantic contribution is {@code similarity * semanticWeight}.
+     */
+    static final double DEFAULT_SEMANTIC_WEIGHT = ScoringWeights.DEFAULT_SEMANTIC_WEIGHT;
 
     private final SystemConfigManager config;
     private final SemanticSimilarity similarity;
@@ -61,7 +65,7 @@ public class SemanticMatchHandler extends AbstractMatchLayerHandler {
         String opportunityText = opportunityText(context.getOpportunity());
 
         double similarityScore = similarity.similarity(studentText, opportunityText);
-        double weight = config.getDouble(SystemConfigManager.KEY_SEMANTIC_WEIGHT, DEFAULT_SEMANTIC_WEIGHT);
+        double weight = ScoringWeights.resolve(config).semanticWeight;
         double contribution = similarityScore * weight;
 
         context.addScore(layerName(), contribution);

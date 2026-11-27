@@ -2,6 +2,8 @@ package com.researchmatch.matching;
 
 import com.researchmatch.models.Opportunity;
 import com.researchmatch.models.StudentProfile;
+import com.researchmatch.repository.SystemConfigManager;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashSet;
@@ -30,6 +32,19 @@ public class EvidenceScoreHandler extends AbstractMatchLayerHandler {
 
     /** Upper bound so a very broad skill set cannot dominate the overall score. */
     static final double MAX_BONUS = 10.0;
+
+    private final SystemConfigManager config;
+
+    /** Spring injects the singleton configuration; used to resolve the evidence weight. */
+    @Autowired
+    public EvidenceScoreHandler(SystemConfigManager config) {
+        this.config = config == null ? SystemConfigManager.getInstance() : config;
+    }
+
+    /** No-arg form (tests/embedded): resolves the singleton configuration. */
+    public EvidenceScoreHandler() {
+        this(SystemConfigManager.getInstance());
+    }
 
     @Override
     public String layerName() {
@@ -66,8 +81,10 @@ public class EvidenceScoreHandler extends AbstractMatchLayerHandler {
         context.addMissingSkills(missing);
 
         long verifiedMatches = matched.stream().filter(verified::contains).count();
-        double bonus = Math.min(verifiedMatches * BONUS_PER_VERIFIED_SKILL, MAX_BONUS);
-        context.addScore(layerName(), bonus);
+        double rawBonus = Math.min(verifiedMatches * BONUS_PER_VERIFIED_SKILL, MAX_BONUS);
+        double normalized = rawBonus / MAX_BONUS;
+        double evidenceWeight = ScoringWeights.resolve(config).evidenceWeight;
+        context.addScore(layerName(), normalized * evidenceWeight);
 
         return MatchLayerHandler.LayerResult.CONTINUE;
     }

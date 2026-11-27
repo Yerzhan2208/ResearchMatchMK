@@ -186,6 +186,9 @@ class SemanticMatchHandlerTest {
         SystemConfigManager mocked = Mockito.mock(SystemConfigManager.class);
         Mockito.when(mocked.getDouble(eq(SystemConfigManager.KEY_SEMANTIC_WEIGHT), anyDouble()))
                 .thenReturn(weight);
+        // Keep the pairing valid (semantic + evidence == 1) so resolution does not fall back to defaults.
+        Mockito.when(mocked.getDouble(eq(SystemConfigManager.KEY_EVIDENCE_WEIGHT), anyDouble()))
+                .thenReturn(1.0 - weight);
         SemanticMatchHandler weighted = new SemanticMatchHandler(mocked);
         MatchContext context = new MatchContext(student, opportunity);
         assertThat(weighted.evaluate(context)).isEqualTo(MatchLayerHandler.LayerResult.CONTINUE);

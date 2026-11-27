@@ -144,6 +144,8 @@ class MatchingEngineTest {
         SystemConfigManager sharedConfig = Mockito.mock(SystemConfigManager.class);
         when(sharedConfig.getDouble(eq(SystemConfigManager.KEY_SEMANTIC_WEIGHT), anyDouble()))
                 .thenReturn(customWeight);
+        when(sharedConfig.getDouble(eq(SystemConfigManager.KEY_EVIDENCE_WEIGHT), anyDouble()))
+                .thenReturn(1.0 - customWeight);
 
         StudentProfile student = eligibleStudent();
         Opportunity opportunity = openOpportunity();
@@ -164,7 +166,7 @@ class MatchingEngineTest {
         // No required skills ⇒ no evidence bonus; total equals the semantic contribution.
         assertThat(sharedScore).isBetween(0.0, customWeight);
         assertThat(sharedScore).isGreaterThan(defaultScore);
-        assertThat(defaultScore).isBetween(0.0, 0.30);
+        assertThat(defaultScore).isBetween(0.0, ScoringWeights.DEFAULT_SEMANTIC_WEIGHT);
     }
 
     // ---------------------------------------------------------------- rankOpportunities
