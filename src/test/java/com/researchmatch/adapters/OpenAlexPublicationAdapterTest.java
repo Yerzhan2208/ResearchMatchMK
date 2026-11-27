@@ -162,11 +162,22 @@ class OpenAlexPublicationAdapterTest {
         }
 
         @Test
-        void titleCasesLowercaseOpenAlexTags() {
+        void keepsTheCuratedCasingOfOpenAlexDisplayNames() {
+            // Regression for #21: this used to assert the *opposite* ("Natural language processing" from an
+            // all-lowercase tag), which pinned the mangling of acronyms like "NLP" and "COVID-19".
             List<ImportedEvidence> evidence = OpenAlexPublicationAdapter.deriveAreas("A1",
-                    List.of(workWith("natural language processing", null, null)));
+                    List.of(workWith("Natural Language Processing", null, null)));
 
-            assertThat(evidence.get(0).skillName()).isEqualTo("Natural language processing");
+            assertThat(evidence.get(0).skillName()).isEqualTo("Natural Language Processing");
+        }
+
+        @Test
+        void doesNotLowerCaseTheFallbackSubfieldOrField() {
+            OpenAlexPublicationAdapter.Work work = new OpenAlexPublicationAdapter.Work(
+                    "t", new OpenAlexPublicationAdapter.Topic(null, "AI", "CS"), null);
+
+            assertThat(OpenAlexPublicationAdapter.deriveAreas("A1", List.of(work)))
+                    .extracting(ImportedEvidence::skillName).containsExactly("AI");
         }
 
         @Test
@@ -216,11 +227,11 @@ class OpenAlexPublicationAdapterTest {
                             "https://api.openalex.org/works?filter=author.id:A5012345601&per-page=50"))
                     .andRespond(withSuccess("""
                             {"results":[
-                              {"title":"NLP study","primary_topic":{"display_name":"natural language processing",
+                              {"title":"NLP study","primary_topic":{"display_name":"Natural Language Processing",
                                "subfield":"Artificial Intelligence","field":"Computer Science"},"concepts":[]},
-                              {"title":"NLP again","primary_topic":{"display_name":"natural language processing",
+                              {"title":"NLP again","primary_topic":{"display_name":"Natural Language Processing",
                                "subfield":"Artificial Intelligence","field":"Computer Science"},"concepts":[]},
-                              {"title":"Vision","primary_topic":{"display_name":"computer vision",
+                              {"title":"Vision","primary_topic":{"display_name":"Computer Vision",
                                "subfield":"Computer Vision","field":"Computer Science"},"concepts":[]}
                             ]}
                             """, MediaType.APPLICATION_JSON));
@@ -228,8 +239,9 @@ class OpenAlexPublicationAdapterTest {
             List<ImportedEvidence> evidence = adapter.importEvidence("A5012345601");
 
             server[0].verify();
+            // #21: OpenAlex's own casing is carried through, not title-cased by us.
             assertThat(evidence).extracting(ImportedEvidence::skillName)
-                    .containsExactly("Natural language processing", "Computer vision");
+                    .containsExactly("Natural Language Processing", "Computer Vision");
             assertThat(evidence.get(0).confidence()).isEqualTo(0.67);
             assertThat(evidence).noneMatch(ImportedEvidence::isSampleData);
         }

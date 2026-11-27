@@ -213,22 +213,53 @@ public class GitHubSkillAdapter implements ResearchDataAdapter {
         return Character.toUpperCase(raw.charAt(0)) + raw.substring(1);
     }
 
-    private static String normaliseHandle(String handle) {
+    /**
+     * Reduces whatever the user pasted to a bare GitHub username.
+     *
+     * <p>Accepts a plain handle, a {@code github.com/<user>} fragment, or a profile URL copied from the
+     * browser — including the {@code https://}, {@code www.} and trailing-slash variants, and importantly
+     * the {@code ?tab=repositories} / {@code #readme} suffixes a browser adds when you copy the address bar.
+     * Everything from the first {@code /}, {@code ?} or {@code #} after the user segment is dropped: those
+     * characters are legal in a URL but never in a GitHub username.
+     *
+     * @throws InvalidRequestException if the input is blank or a URL with no username segment
+     */
+    static String normaliseHandle(String handle) {
         if (handle == null || handle.isBlank()) {
             throw new InvalidRequestException("A GitHub handle is required for the import");
         }
-        String trimmed = handle.trim();
-        // Accept full profile URLs as pasted by users.
-        if (trimmed.contains("github.com/")) {
-            trimmed = trimmed.substring(trimmed.indexOf("github.com/") + "github.com/".length());
+        String candidate = handle.trim();
+        final String lower = candidate.toLowerCase(Locale.ROOT);
+
+        // Drop a scheme and any host prefix up to "github.com/", leaving the user segment (if any).
+        String hostMarker = "github.com/";
+        int hostAt = lower.indexOf(hostMarker);
+        if (hostAt >= 0) {
+            candidate = candidate.substring(hostAt + hostMarker.length());
         }
-        if (trimmed.endsWith("/")) {
-            trimmed = trimmed.substring(0, trimmed.length() - 1);
-        }
-        if (trimmed.isBlank()) {
+
+        // Keep only the first path segment, without any query string or fragment.
+        candidate = cutAtFirst(candidate, '/');
+        candidate = cutAtFirst(candidate, '?');
+        candidate = cutAtFirst(candidate, '#');
+        candidate = candidate.trim();
+
+        // Whatever is left must be the username: never a leftover scheme or the bare host.
+        String bareHost = candidate.toLowerCase(Locale.ROOT);
+        if (bareHost.equals("github.com") || bareHost.equals("www.github.com")
+                || bareHost.equals("https:") || bareHost.equals("http:")) {
             throw new InvalidRequestException("A GitHub handle is required for the import");
         }
-        return trimmed;
+        if (candidate.isBlank()) {
+            throw new InvalidRequestException("A GitHub handle is required for the import");
+        }
+        return candidate;
+    }
+
+    /** Returns the part of {@code value} before the first {@code delimiter}, or {@code value} itself. */
+    private static String cutAtFirst(String value, char delimiter) {
+        int at = value.indexOf(delimiter);
+        return at < 0 ? value : value.substring(0, at);
     }
 
     /** Minimal projection of a GitHub repository payload; unknown fields are ignored by Jackson. */
