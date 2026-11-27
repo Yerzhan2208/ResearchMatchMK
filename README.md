@@ -37,7 +37,8 @@ scripts/coverage.sh --run --html # run tests, then write target/site/jacoco-dash
 scripts/coverage.sh --open       # open the JaCoCo HTML report in a browser
 ```
 
-On Windows use `scripts\coverage.bat`. The tool wraps `scripts/coverage.py` (Python 3, no extra deps),
+On Windows use `scripts\coverage.bat` (or `test.bat` for the one-shot run). The `.sh` wrappers need bash
+(WSL or Git Bash). The tool wraps `scripts/coverage.py` (Python 3, no extra deps),
 works from any directory, and flags any class still missing tests. Project policy: **100% line coverage**,
 **≥ 85% branch** (see [`AGENTS.md`](AGENTS.md) §5).
 
