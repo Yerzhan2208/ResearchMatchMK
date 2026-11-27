@@ -38,7 +38,8 @@ class AdaptersTest {
 
     @Test
     void adaptersImportWithoutNetworkAndRejectBlankHandles() {
-        List<ImportedEvidence> github = new GitHubSkillAdapter("  ", null).importEvidence("octocat");
+        List<ImportedEvidence> github = new GitHubSkillAdapter("  ", null)
+                .importEvidence("demo-mei-ling-ho");
         assertThat(github).isNotEmpty().allSatisfy(e -> assertThat(e.isSampleData()).isTrue());
 
         OpenAlexPublicationAdapter openAlex = new OpenAlexPublicationAdapter(false, null, null);

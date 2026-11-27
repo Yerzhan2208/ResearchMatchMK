@@ -49,8 +49,8 @@ class GitHubSkillAdapterTest {
 
         @Test
         void isDeterministicForTheSameHandle() {
-            List<ImportedEvidence> first = adapter.importEvidence("octocat");
-            List<ImportedEvidence> second = adapter.importEvidence("octocat");
+            List<ImportedEvidence> first = adapter.importEvidence("demo-mei-ling-ho");
+            List<ImportedEvidence> second = adapter.importEvidence("demo-mei-ling-ho");
 
             assertThat(first).isNotEmpty().isEqualTo(second);
         }
@@ -93,7 +93,7 @@ class GitHubSkillAdapterTest {
 
         @Test
         void fixtureEvidenceIsLabelledAsSampleDataNotAsFetchedEvidence() {
-            List<ImportedEvidence> evidence = adapter.importEvidence("octocat");
+            List<ImportedEvidence> evidence = adapter.importEvidence("demo-mei-ling-ho");
 
             assertThat(evidence).isNotEmpty();
             assertThat(evidence).allSatisfy(e -> {
