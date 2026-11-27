@@ -48,14 +48,16 @@ class AdapterBranchCoverageTest {
 
     @Test
     void titleCase_emptyInputGuards() throws Exception {
-        // Callers filter blank inputs, so the empty guards are reached directly.
+        // GitHub topics still arrive lowercase, so that adapter keeps its title-casing helper.
         java.lang.reflect.Method gh = GitHubSkillAdapter.class.getDeclaredMethod("titleCase", String.class);
         gh.setAccessible(true);
         assertThat((String) gh.invoke(null, "")).isEmpty();
+    }
 
-        java.lang.reflect.Method oa = OpenAlexPublicationAdapter.class.getDeclaredMethod("titleCase", String.class);
-        oa.setAccessible(true);
-        assertThat((String) oa.invoke(null, "")).isEmpty();
-        assertThat((String) oa.invoke(null, "  ")).isEmpty();
+    @Test
+    void openAlexAdapterNoLongerReCasesDisplayNames() {
+        // #21: the helper (and every reflection break it caused) is gone; display names pass through.
+        assertThat(OpenAlexPublicationAdapter.class.getDeclaredMethods())
+                .noneMatch(m -> m.getName().equals("titleCase"));
     }
 }
