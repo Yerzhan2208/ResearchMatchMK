@@ -106,6 +106,13 @@ class DataSeederTest {
         }
 
         @Test
+        void atLeastOneSeededStudentHasVerifiedSkillEvidence() {
+            // A seeded fixture with verified skills lets the demo/tests exercise the evidence scoring layer.
+            assertThat(studentRepository.findAll())
+                    .anySatisfy(student -> assertThat(student.getVerifiedSkills()).isNotEmpty());
+        }
+
+        @Test
         void seedingIsIdempotent() {
             long opportunitiesBefore = opportunityRepository.count();
             long studentsBefore = studentRepository.count();

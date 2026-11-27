@@ -9,6 +9,7 @@ import com.researchmatch.repository.StudentRepository;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.annotation.SessionScope;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
@@ -91,6 +92,12 @@ public class DemoRoleSession {
         student.setAcademicYear(3);
         student.setHoursPerWeek(10);
         student.setGithubUsername("demo-mei-ling-ho");
+        // Realistic interests + claimed skills so the discovery feed produces non-zero, meaningful scores
+        // (issue #20). These are the student's own claims, not verified evidence, so evidence scoring stays
+        // honest — verified skills only come from a real external lookup.
+        student.setInterests(new LinkedHashSet<>(List.of("Machine Learning", "Natural Language Processing",
+                "Data Mining")));
+        student.setClaimedSkills(new LinkedHashSet<>(List.of("Python", "SQL")));
         // Privacy rule: the entity default (false) is intentionally left untouched.
         return studentRepository.save(student);
     }
