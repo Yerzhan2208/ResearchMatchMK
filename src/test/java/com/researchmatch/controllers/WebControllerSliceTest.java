@@ -150,7 +150,7 @@ class WebControllerSliceTest {
                 .andExpect(content().string(containsString("Import evidence")))
                 .andExpect(content().string(containsString("Java")))
                 .andExpect(content().string(containsString("github")))
-                .andExpect(content().string(containsString("value=\"octocat\"")));
+                .andExpect(content().string(containsString("Pull verified skills from GitHub or OpenAlex.")));
     }
 
     @Test
