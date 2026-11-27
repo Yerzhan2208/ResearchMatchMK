@@ -88,16 +88,20 @@ class ScoringScaleTest {
     // ---------------------------------------------------------------- 2. evidence-only
 
     @Test
-    void verifiedSkillEvidenceScoresPositiveEvenWithoutSemanticOverlap() {
+    void verifiedSkillEvidenceScoresPositiveEvenWithoutTitleDescriptionOverlap() {
         // Verified skill matches a required skill; title/description share no terms with student text.
         StudentProfile student = student(Set.of(), Set.of(), Set.of("kotlin"));
         Opportunity opp = opportunity(2L, "Quantum chromodynamics", "lattice field theory", Set.of("Kotlin"));
 
         double score = evaluateScore(student, opp);
-
         assertThat(score).isGreaterThan(0.0);
-        // One verified skill ⇒ (2/10) * 0.3 = 0.06.
-        assertThat(score).isCloseTo(0.06, org.assertj.core.data.Offset.offset(1e-9));
+
+        // Isolate the evidence layer: one verified match ⇒ (2/10) * 0.3 = 0.06. Structured skills also feed
+        // the semantic layer now, so the combined score is higher than the evidence contribution alone.
+        MatchContext evidenceOnly = new MatchContext(student, opp);
+        new EvidenceScoreHandler().evaluate(evidenceOnly);
+        assertThat(evidenceOnly.getLayerScores().get(EvidenceScoreHandler.LAYER))
+                .isCloseTo(0.06, org.assertj.core.data.Offset.offset(1e-9));
     }
 
     // ---------------------------------------------------------------- 3. combined + bounds
