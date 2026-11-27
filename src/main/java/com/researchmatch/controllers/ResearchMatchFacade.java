@@ -19,15 +19,21 @@ import com.researchmatch.repository.FacultyRepository;
 import com.researchmatch.repository.OpportunityRepository;
 import com.researchmatch.repository.SkillEvidenceRepository;
 import com.researchmatch.repository.StudentRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * Facade (Member 4): the single entry point used by the web layer and by Member 5's end-to-end tests.
@@ -47,6 +53,9 @@ public class ResearchMatchFacade {
     private final MatchingEngine matchingEngine;
     private final RecruitmentPipeline recruitmentPipeline;
     private final ResearchDataSourceRegistry adapterRegistry;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     /**
      * A student may not claim more than this many hours a week; a sanity ceiling that turns typos
@@ -123,6 +132,22 @@ public class ResearchMatchFacade {
         return studentRepository.save(student);
     }
 
+    @Transactional
+    void updateStudentProfile(Long studentId, Consumer<StudentProfile> edit) {
+        StudentProfile student = getStudent(studentId);
+        refreshForUpdate(student);
+        edit.accept(student);
+        saveStudent(student);
+    }
+
+    /** Serialize form edits and imports for the same student until the transaction commits. */
+    private void refreshForUpdate(StudentProfile student) {
+        // Standalone facade consumers do not have a Spring-managed persistence context.
+        if (entityManager != null) {
+            entityManager.refresh(student, LockModeType.PESSIMISTIC_WRITE);
+        }
+    }
+
     // ---------------------------------------------------------------- skills
 
     /**
@@ -146,10 +171,15 @@ public class ResearchMatchFacade {
         }
         ResearchDataAdapter adapter = adapterRegistry.forSource(source)
                 .orElseThrow(() -> new InvalidRequestException("Unknown import source: " + source));
-        List<ImportedEvidence> imported = adapter.importEvidence(handle.trim());
+        List<SkillEvidence> incoming = toEvidence(studentId, adapter.importEvidence(handle.trim()));
+        if (incoming.isEmpty()) {
+            return List.of();
+        }
+        // Re-read under the write lock after the provider call, without holding the lock during network I/O.
+        refreshForUpdate(student);
         // Fixture entries (no live lookup) are sample data: stored so the demo shows something, flagged
         // unverified, and never promoted into verifiedSkills below.
-        List<SkillEvidence> persisted = skillEvidenceRepository.saveAll(toEvidence(student.getId(), imported));
+        List<SkillEvidence> persisted = skillEvidenceRepository.saveAll(mergeEvidence(studentId, incoming));
 
         // Promote genuinely imported skills to verified skills on the profile so matching can use them.
         Set<String> verified = student.getVerifiedSkills() == null
@@ -162,6 +192,28 @@ public class ResearchMatchFacade {
         student.setVerifiedSkills(verified);
         studentRepository.save(student);
         return persisted;
+    }
+
+    private List<SkillEvidence> mergeEvidence(Long studentId, List<SkillEvidence> incoming) {
+        Map<EvidenceKey, SkillEvidence> existing = new LinkedHashMap<>();
+        for (SkillEvidence row : skillEvidenceRepository.findByStudentId(studentId)) {
+            existing.putIfAbsent(EvidenceKey.of(row), row);
+        }
+        Map<EvidenceKey, SkillEvidence> updates = new LinkedHashMap<>();
+        for (SkillEvidence row : incoming) {
+            EvidenceKey key = EvidenceKey.of(row);
+            SkillEvidence stored = existing.getOrDefault(key, row);
+            stored.setEvidenceSnippet(row.getEvidenceSnippet());
+            stored.setVerifiedByStudent(row.isVerifiedByStudent());
+            updates.put(key, stored);
+        }
+        return new ArrayList<>(updates.values());
+    }
+
+    private record EvidenceKey(String skill, String source) {
+        private static EvidenceKey of(SkillEvidence row) {
+            return new EvidenceKey(row.getSkillName(), row.getRepoName());
+        }
     }
 
     /** Evidence rows for a student, newest first (repository order preserved). Never null. */
@@ -321,7 +373,8 @@ public class ResearchMatchFacade {
         } else {
             result = new ArrayList<>();
             for (StudentProfile candidate : searchable) {
-                if (candidate != null && candidate.getId() != null && applicantIds.contains(candidate.getId())) {
+                if (candidate != null && searchableIds.contains(candidate.getId()) && candidate.isSearchableByFaculty()
+                        && applicantIds.contains(candidate.getId())) {
                     result.add(candidate);
                 }
             }
