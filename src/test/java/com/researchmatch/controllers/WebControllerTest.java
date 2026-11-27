@@ -265,13 +265,14 @@ class WebControllerTest {
                         .param("searchableByFaculty", "true"))
                 .andExpect(redirectedUrl("/profile"))
                 .andExpect(flash().attributeExists("successMessage"));
-        verify(facade).saveStudent(any(StudentProfile.class));
+        verify(facade).updateStudentProfile(eq(7L), any());
     }
 
     @Test
     void saveProfileTranslatesException() throws Exception {
         when(session.currentStudent()).thenReturn(student());
-        when(facade.saveStudent(any())).thenThrow(new DuplicateEntityException("dup"));
+        org.mockito.Mockito.doThrow(new DuplicateEntityException("dup"))
+                .when(facade).updateStudentProfile(eq(7L), any());
         mvc.perform(post("/profile").param("name", "Ada").param("email", "x@y.com"))
                 .andExpect(flash().attribute("errorMessage", "dup"));
     }
@@ -281,7 +282,7 @@ class WebControllerTest {
         when(session.currentStudent()).thenReturn(null);
         mvc.perform(post("/profile").param("name", "Ada"))
                 .andExpect(flash().attributeExists("errorMessage"));
-        verify(facade, never()).saveStudent(any());
+        verify(facade, never()).updateStudentProfile(any(), any());
     }
 
     @Test
@@ -567,10 +568,11 @@ class WebControllerTest {
                         .param("claimedSkills", "Java, ,Python"))
                 .andExpect(redirectedUrl("/profile"));
 
-        org.mockito.ArgumentCaptor<StudentProfile> captor =
-                org.mockito.ArgumentCaptor.forClass(StudentProfile.class);
-        verify(facade).saveStudent(captor.capture());
-        StudentProfile saved = captor.getValue();
+        org.mockito.ArgumentCaptor<java.util.function.Consumer<StudentProfile>> captor =
+                org.mockito.ArgumentCaptor.captor();
+        verify(facade).updateStudentProfile(eq(7L), captor.capture());
+        StudentProfile saved = student();
+        captor.getValue().accept(saved);
         assertThat(saved.getInterests()).isEmpty();
         assertThat(saved.getClaimedSkills()).containsExactly("Java", "Python");
     }
@@ -578,7 +580,8 @@ class WebControllerTest {
     @Test
     void saveProfileDuplicateEmailFlashesError() throws Exception {
         when(session.currentStudent()).thenReturn(student());
-        when(facade.saveStudent(any())).thenThrow(new DuplicateEntityException("dup"));
+        org.mockito.Mockito.doThrow(new DuplicateEntityException("dup"))
+                .when(facade).updateStudentProfile(eq(7L), any());
 
         mvc.perform(post("/profile").param("name", "Ada").param("email", "ada@example.com"))
                 .andExpect(redirectedUrl("/profile"))
