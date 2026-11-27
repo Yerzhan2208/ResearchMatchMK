@@ -61,6 +61,12 @@ class WebControllerTest {
         return s;
     }
 
+    private StudentProfile studentWithHandle(String handle) {
+        StudentProfile s = student();
+        s.setGithubUsername(handle);
+        return s;
+    }
+
     private FacultyProfile faculty() {
         FacultyProfile f = new FacultyProfile();
         f.setId(3L);
@@ -275,27 +281,51 @@ class WebControllerTest {
     }
 
     @Test
-    void importSkillsReportsEmptyAndSuccessAndError() throws Exception {
-        when(session.currentStudent()).thenReturn(student());
+    void importSkillsUsesTheStudentsOwnHandleNotAPostedOne() throws Exception {
+        when(session.currentStudent()).thenReturn(studentWithHandle("demo-mei-ling-ho"));
 
-        when(facade.importSkills(7L, "github", "octocat")).thenReturn(List.of());
-        mvc.perform(post("/profile/import").param("source", "github").param("handle", "octocat"))
+        when(facade.importSkills(7L, "github", "demo-mei-ling-ho")).thenReturn(List.of());
+        mvc.perform(post("/profile/import").param("source", "github"))
                 .andExpect(flash().attributeExists("infoMessage"));
 
-        when(facade.importSkills(7L, "github", "octocat"))
+        when(facade.importSkills(7L, "github", "demo-mei-ling-ho"))
                 .thenReturn(List.of(new SkillEvidence(1L, 7L, "Java", "r", "s")));
-        mvc.perform(post("/profile/import").param("source", "github").param("handle", "octocat"))
+        mvc.perform(post("/profile/import").param("source", "github"))
                 .andExpect(flash().attributeExists("successMessage"));
 
-        when(facade.importSkills(7L, "bad", "x")).thenThrow(new InvalidRequestException("Unknown import source"));
-        mvc.perform(post("/profile/import").param("source", "bad").param("handle", "x"))
+        when(facade.importSkills(7L, "bad", "demo-mei-ling-ho"))
+                .thenThrow(new InvalidRequestException("Unknown import source"));
+        mvc.perform(post("/profile/import").param("source", "bad"))
                 .andExpect(flash().attribute("errorMessage", "Unknown import source"));
+    }
+
+    @Test
+    void importSkillsIgnoresAHandleSubmittedInTheForm() throws Exception {
+        // The handle field is gone from the UI; a posted one must not be able to override the student's own.
+        when(session.currentStudent()).thenReturn(studentWithHandle("demo-mei-ling-ho"));
+        when(facade.importSkills(7L, "github", "demo-mei-ling-ho")).thenReturn(List.of());
+
+        mvc.perform(post("/profile/import").param("source", "github").param("handle", "someone-else"))
+                .andExpect(flash().attributeExists("infoMessage"));
+
+        verify(facade).importSkills(7L, "github", "demo-mei-ling-ho");
+        verify(facade, never()).importSkills(7L, "github", "someone-else");
+    }
+
+    @Test
+    void importSkillsWithoutAStoredHandleShowsInfo() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+
+        mvc.perform(post("/profile/import").param("source", "github"))
+                .andExpect(flash().attributeExists("infoMessage"));
+
+        verify(facade, never()).importSkills(any(), any(), any());
     }
 
     @Test
     void importSkillsWithoutStudentShowsError() throws Exception {
         when(session.currentStudent()).thenReturn(null);
-        mvc.perform(post("/profile/import").param("handle", "x"))
+        mvc.perform(post("/profile/import").param("source", "github"))
                 .andExpect(flash().attributeExists("errorMessage"));
     }
 
