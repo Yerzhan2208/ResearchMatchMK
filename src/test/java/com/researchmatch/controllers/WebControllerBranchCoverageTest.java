@@ -8,6 +8,7 @@ import com.researchmatch.models.MatchResult;
 import com.researchmatch.models.Opportunity;
 import com.researchmatch.models.StudentProfile;
 import com.researchmatch.repository.ApplicationRepository;
+import com.researchmatch.repository.StudentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
@@ -37,6 +38,7 @@ class WebControllerBranchCoverageTest {
     private ResearchMatchFacade facade;
     private DemoRoleSession session;
     private ApplicationRepository applicationRepository;
+    private StudentRepository studentRepository;
     private MockMvc mvc;
 
     @BeforeEach
@@ -44,7 +46,8 @@ class WebControllerBranchCoverageTest {
         facade = mock(ResearchMatchFacade.class);
         session = mock(DemoRoleSession.class);
         applicationRepository = mock(ApplicationRepository.class);
-        WebController controller = new WebController(facade, session, applicationRepository);
+        studentRepository = mock(StudentRepository.class);
+        WebController controller = new WebController(facade, session, applicationRepository, studentRepository);
         InternalResourceViewResolver resolver = new InternalResourceViewResolver();
         resolver.setPrefix("/templates/");
         resolver.setSuffix(".html");
@@ -208,7 +211,7 @@ class WebControllerBranchCoverageTest {
     void switchRole_nullRoleValueOfBranch() throws Exception {
         // Direct call: Spring's @RequestParam would reject a missing value, but the null-safe ternary is a
         // real defensive branch worth covering.
-        WebController controller = new WebController(facade, session, applicationRepository);
+        WebController controller = new WebController(facade, session, applicationRepository, studentRepository);
         org.springframework.web.servlet.mvc.support.RedirectAttributes attrs =
                 new org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap();
         String view = controller.switchRole(null, attrs);
@@ -217,7 +220,7 @@ class WebControllerBranchCoverageTest {
 
     @Test
     void transitionApplication_nullActionUnknownBranch() {
-        WebController controller = new WebController(facade, session, applicationRepository);
+        WebController controller = new WebController(facade, session, applicationRepository, studentRepository);
         org.springframework.web.servlet.mvc.support.RedirectAttributes attrs =
                 new org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap();
         String view = controller.transitionApplication(1L, null, attrs);

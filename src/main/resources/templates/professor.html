@@ -152,24 +152,29 @@
                 </div>
                 <p th:if="${#lists.isEmpty(column.value)}" class="text-xs text-slate-400 text-center py-4">Empty</p>
                 <ul class="space-y-2">
-                    <li th:each="app : ${column.value}" class="rounded-lg bg-white border border-slate-200 p-2">
-                        <div class="text-xs text-slate-500" th:text="'Application #' + ${app.id}">#</div>
-                        <div class="text-xs text-slate-400" th:text="'Student ' + ${app.studentId}">student</div>
+                    <li th:each="card : ${column.value}" class="rounded-lg bg-white border border-slate-200 p-2">
+                        <div class="text-xs font-semibold text-slate-700" th:text="${card.studentName()}">student</div>
+                        <div class="text-xs text-slate-500" th:text="${card.opportunityTitle()}">job</div>
+                        <p th:if="${!#strings.isEmpty(card.statement())}"
+                           class="mt-1 text-xs text-slate-600 line-clamp-3"
+                           th:title="${card.statement()}"
+                           th:text="${card.statement()}">statement</p>
+                        <div class="mt-1 text-[0.65rem] text-slate-400" th:text="'Application #' + ${card.application().id}">#</div>
                         <div class="mt-2 flex flex-wrap gap-1">
-                            <form th:if="${app.status.name() == 'NEW'}" th:action="@{'/applications/' + ${app.id} + '/transition'}" method="post">
+                            <form th:if="${card.application().status.name() == 'NEW'}" th:action="@{'/applications/' + ${card.application().id} + '/transition'}" method="post">
                                 <input type="hidden" name="action" value="shortlist"/>
                                 <button class="rounded bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 hover:bg-indigo-100">Shortlist</button>
                             </form>
-                            <form th:if="${app.status.name() == 'SHORTLISTED'}" th:action="@{'/applications/' + ${app.id} + '/transition'}" method="post">
+                            <form th:if="${card.application().status.name() == 'SHORTLISTED'}" th:action="@{'/applications/' + ${card.application().id} + '/transition'}" method="post">
                                 <input type="hidden" name="action" value="interview"/>
                                 <button class="rounded bg-sky-50 px-2 py-0.5 text-xs text-sky-700 hover:bg-sky-100">Interview</button>
                             </form>
-                            <form th:if="${app.status.name() == 'INTERVIEW'}" th:action="@{'/applications/' + ${app.id} + '/transition'}" method="post">
+                            <form th:if="${card.application().status.name() == 'INTERVIEW'}" th:action="@{'/applications/' + ${card.application().id} + '/transition'}" method="post">
                                 <input type="hidden" name="action" value="accept"/>
                                 <button class="rounded bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-100">Accept</button>
                             </form>
-                            <form th:if="${app.status.name() == 'NEW' or app.status.name() == 'SHORTLISTED' or app.status.name() == 'INTERVIEW'}"
-                                  th:action="@{'/applications/' + ${app.id} + '/transition'}" method="post">
+                            <form th:if="${card.application().status.name() == 'NEW' or card.application().status.name() == 'SHORTLISTED' or card.application().status.name() == 'INTERVIEW'}"
+                                  th:action="@{'/applications/' + ${card.application().id} + '/transition'}" method="post">
                                 <input type="hidden" name="action" value="reject"/>
                                 <button class="rounded bg-rose-50 px-2 py-0.5 text-xs text-rose-700 hover:bg-rose-100">Reject</button>
                             </form>

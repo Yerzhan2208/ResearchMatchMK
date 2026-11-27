@@ -13,6 +13,7 @@ import com.researchmatch.models.Opportunity;
 import com.researchmatch.models.SkillEvidence;
 import com.researchmatch.models.StudentProfile;
 import com.researchmatch.repository.ApplicationRepository;
+import com.researchmatch.repository.StudentRepository;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -46,13 +47,16 @@ public class WebController {
     private final ResearchMatchFacade facade;
     private final DemoRoleSession session;
     private final ApplicationRepository applicationRepository;
+    private final StudentRepository studentRepository;
 
     public WebController(ResearchMatchFacade facade,
                          DemoRoleSession session,
-                         ApplicationRepository applicationRepository) {
+                         ApplicationRepository applicationRepository,
+                         StudentRepository studentRepository) {
         this.facade = facade;
         this.session = session;
         this.applicationRepository = applicationRepository;
+        this.studentRepository = studentRepository;
     }
 
     // ---------------------------------------------------------------- shared
@@ -356,9 +360,13 @@ public class WebController {
     /**
      * Builds the professor's pipeline board: one column per {@link Application.Status}, each holding the
      * applications of the faculty's opportunities. Pure presentation grouping; no state rules here.
+     *
+     * <p>{@link Application} stores the student only as a foreign key, so each application is paired here with
+     * its resolved {@link StudentProfile}. Without that join the board could show "Student 5" but never a name,
+     * and the professor could not tell who they were reviewing.
      */
-    private Map<String, List<Application>> pipelineBoard(List<Opportunity> opportunities) {
-        Map<String, List<Application>> board = new LinkedHashMap<>();
+    private Map<String, List<ApplicationCard>> pipelineBoard(List<Opportunity> opportunities) {
+        Map<String, List<ApplicationCard>> board = new LinkedHashMap<>();
         for (Application.Status status : Application.Status.values()) {
             board.put(status.name(), new ArrayList<>());
         }
@@ -377,10 +385,19 @@ public class WebController {
                 if (application == null || application.getStatus() == null) {
                     continue;
                 }
-                board.get(application.getStatus().name()).add(application);
+                board.get(application.getStatus().name()).add(card(application, opportunity));
             }
         }
         return board;
+    }
+
+    /** Pairs an application with its student profile; a missing student row still yields a usable card. */
+    private ApplicationCard card(Application application, Opportunity opportunity) {
+        StudentProfile student = null;
+        if (application.getStudentId() != null) {
+            student = studentRepository.findById(application.getStudentId()).orElse(null);
+        }
+        return new ApplicationCard(application, student, opportunity);
     }
 
     private static List<String> splitCsv(String value) {

@@ -10,14 +10,18 @@ import com.researchmatch.models.Opportunity;
 import com.researchmatch.models.SkillEvidence;
 import com.researchmatch.models.StudentProfile;
 import com.researchmatch.repository.ApplicationRepository;
+import com.researchmatch.repository.StudentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.servlet.view.InternalResourceViewResolver;
 
 import java.util.List;
+import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -39,6 +43,7 @@ class WebControllerTest {
     private ResearchMatchFacade facade;
     private DemoRoleSession session;
     private ApplicationRepository applicationRepository;
+    private StudentRepository studentRepository;
     private MockMvc mvc;
 
     @BeforeEach
@@ -46,7 +51,8 @@ class WebControllerTest {
         facade = mock(ResearchMatchFacade.class);
         session = mock(DemoRoleSession.class);
         applicationRepository = mock(ApplicationRepository.class);
-        WebController controller = new WebController(facade, session, applicationRepository);
+        studentRepository = mock(StudentRepository.class);
+        WebController controller = new WebController(facade, session, applicationRepository, studentRepository);
         InternalResourceViewResolver resolver = new InternalResourceViewResolver();
         resolver.setPrefix("/templates/");
         resolver.setSuffix(".html");
@@ -392,6 +398,66 @@ class WebControllerTest {
         when(applicationRepository.findByOpportunityId(10L)).thenReturn(null);
 
         mvc.perform(get("/professor")).andExpect(status().isOk());
+    }
+
+    @Test
+    void professorBoardCarriesStudentNameAndStatement() throws Exception {
+        // The board used to print "Student <id>" and dropped the statement entirely, so a professor could
+        // review an application knowing neither who applied nor what they wrote.
+        when(session.currentFaculty()).thenReturn(faculty());
+        Opportunity op = new Opportunity(10L, 3L, "NLP Research Assistant", "d");
+        when(facade.opportunitiesForFaculty(3L)).thenReturn(List.of(op));
+        when(facade.discoverCandidates(3L)).thenReturn(List.of());
+
+        Application app = new Application(1L, 7L, 10L);
+        app.setStatus(Application.Status.NEW);
+        app.setStatement("I built a tokeniser and would love to join.");
+        when(applicationRepository.findByOpportunityId(10L)).thenReturn(List.of(app));
+        when(studentRepository.findById(7L)).thenReturn(java.util.Optional.of(student()));
+
+        MvcResult result = mvc.perform(get("/professor")).andExpect(status().isOk()).andReturn();
+
+        @SuppressWarnings("unchecked")
+        Map<String, List<ApplicationCard>> board =
+                (Map<String, List<ApplicationCard>>) result.getModelAndView().getModel().get("board");
+        assertThat(board.get("NEW")).hasSize(1);
+        ApplicationCard card = board.get("NEW").get(0);
+        assertThat(card.studentName()).isEqualTo("Ada");
+        assertThat(card.statement()).isEqualTo("I built a tokeniser and would love to join.");
+        assertThat(card.opportunityTitle()).isEqualTo("NLP Research Assistant");
+    }
+
+    @Test
+    void applicationCardFallsBackWhenStudentOrDataIsMissing() {
+        // A deleted student row must not blank the card out: the template still needs something to show.
+        Application app = new Application(1L, null, 10L);
+        app.setStatement(null);
+
+        ApplicationCard noStudent = new ApplicationCard(app, null, null);
+        assertThat(noStudent.studentName()).isEqualTo("Student null");
+        assertThat(noStudent.statement()).isEmpty();
+        assertThat(noStudent.opportunityTitle()).isEqualTo("Opportunity 10");
+
+        StudentProfile blank = new StudentProfile();
+        blank.setName("   ");
+        Opportunity untitled = new Opportunity(10L, 3L, "  ", "d");
+        ApplicationCard blankish = new ApplicationCard(app, blank, untitled);
+        assertThat(blankish.studentName()).isEqualTo("Student null");
+        assertThat(blankish.opportunityTitle()).isEqualTo("Opportunity 10");
+    }
+
+    @Test
+    void applicationCardHandlesNullStudentId() throws Exception {
+        when(session.currentFaculty()).thenReturn(faculty());
+        Opportunity op = new Opportunity(10L, 3L, "NLP", "d");
+        when(facade.opportunitiesForFaculty(3L)).thenReturn(List.of(op));
+        when(facade.discoverCandidates(3L)).thenReturn(List.of());
+        Application orphan = new Application(1L, null, 10L);
+        orphan.setStatus(Application.Status.NEW);
+        when(applicationRepository.findByOpportunityId(10L)).thenReturn(List.of(orphan));
+
+        mvc.perform(get("/professor")).andExpect(status().isOk());
+        verify(studentRepository, never()).findById(any());
     }
 
     @Test
