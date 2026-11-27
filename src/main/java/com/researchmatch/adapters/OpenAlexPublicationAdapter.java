@@ -206,13 +206,15 @@ public class OpenAlexPublicationAdapter implements ResearchDataAdapter {
         if (topic != null) {
             String candidate = firstNonBlank(topic.displayName(), topic.subfield(), topic.field());
             if (candidate != null) {
-                return titleCase(candidate);
+                // Trim only: these are curated display strings ("NLP", "COVID-19", "PhD-level analysis"),
+                // so re-casing them would corrupt acronyms and proper nouns (issue #21).
+                return candidate.trim();
             }
         }
         if (work.concepts() != null) {
             for (Concept concept : work.concepts()) {
                 if (concept != null && concept.displayName() != null && !concept.displayName().isBlank()) {
-                    return titleCase(concept.displayName());
+                    return concept.displayName().trim();
                 }
             }
         }
@@ -226,14 +228,6 @@ public class OpenAlexPublicationAdapter implements ResearchDataAdapter {
             }
         }
         return null;
-    }
-
-    private static String titleCase(String raw) {
-        String trimmed = raw.trim();
-        if (trimmed.isEmpty()) {
-            return trimmed;
-        }
-        return Character.toUpperCase(trimmed.charAt(0)) + trimmed.substring(1);
     }
 
     private static String normaliseAuthorId(String handle) {
