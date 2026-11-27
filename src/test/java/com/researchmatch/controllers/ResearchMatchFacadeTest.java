@@ -524,6 +524,7 @@ class ResearchMatchFacadeTest {
         StudentProfile target = student();
         SkillEvidence blank = new SkillEvidence(1L, 7L, "  ", "r", "s");
         SkillEvidence java = new SkillEvidence(2L, 7L, "Java", "r", "s");
+        java.setVerifiedByStudent(true);
         when(studentRepository.findById(7L)).thenReturn(Optional.of(target));
         when(skillEvidenceRepository.saveAll(anyList())).thenReturn(List.of(blank, java));
         when(studentRepository.save(any(StudentProfile.class))).thenAnswer(i -> i.getArgument(0));
@@ -648,6 +649,7 @@ class ResearchMatchFacadeTest {
         when(studentRepository.findById(7L)).thenReturn(Optional.of(student()));
         SkillEvidence nullSkill = new SkillEvidence(2L, 7L, null, "r", "s");
         SkillEvidence java = new SkillEvidence(1L, 7L, "Java", "r", "s");
+        java.setVerifiedByStudent(true);
         when(skillEvidenceRepository.saveAll(anyList())).thenReturn(List.of(nullSkill, java));
         when(studentRepository.save(any(StudentProfile.class))).thenAnswer(i -> i.getArgument(0));
 
