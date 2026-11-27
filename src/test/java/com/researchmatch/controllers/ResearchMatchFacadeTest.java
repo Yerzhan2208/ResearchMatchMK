@@ -602,6 +602,61 @@ class ResearchMatchFacadeTest {
         assertThat(rows.get(0).getSkillName()).isEqualTo("Java");
     }
 
+    @Test
+    void importSkillsRejectsNullHandle() {
+        when(studentRepository.findById(7L)).thenReturn(Optional.of(student()));
+        assertThatThrownBy(() -> facade.importSkills(7L, "github", null))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining("handle");
+    }
+
+    @Test
+    void importSkillsRejectsWhitespaceSource() {
+        when(studentRepository.findById(7L)).thenReturn(Optional.of(student()));
+        assertThatThrownBy(() -> facade.importSkills(7L, "  ", "octocat"))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining("must not be blank");
+    }
+
+    @Test
+    void importSkillsRejectsEmptySource() {
+        when(studentRepository.findById(7L)).thenReturn(Optional.of(student()));
+        assertThatThrownBy(() -> facade.importSkills(7L, "", "octocat"))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining("must not be blank");
+    }
+
+    @Test
+    void saveStudentRejectsNullEmail() {
+        StudentProfile incoming = student();
+        incoming.setEmail(null);
+        assertThatThrownBy(() -> facade.saveStudent(incoming))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining("mail");
+    }
+
+    @Test
+    void importSkillsSkipsNullSkillNames() {
+        ResearchDataAdapter adapter = Mockito.mock(ResearchDataAdapter.class);
+        when(adapter.platformName()).thenReturn("github");
+        when(adapter.importEvidence("octocat"))
+                .thenReturn(List.of(new ImportedEvidence("Java", "repo", "snip", 0.5)));
+        ResearchMatchFacade custom = new ResearchMatchFacade(studentRepository, facultyRepository,
+                opportunityRepository, applicationRepository, skillEvidenceRepository, matchingEngine,
+                recruitmentPipeline, new AdapterRegistry(List.of(adapter)));
+
+        when(studentRepository.findById(7L)).thenReturn(Optional.of(student()));
+        SkillEvidence nullSkill = new SkillEvidence(2L, 7L, null, "r", "s");
+        SkillEvidence java = new SkillEvidence(1L, 7L, "Java", "r", "s");
+        when(skillEvidenceRepository.saveAll(anyList())).thenReturn(List.of(nullSkill, java));
+        when(studentRepository.save(any(StudentProfile.class))).thenAnswer(i -> i.getArgument(0));
+
+        custom.importSkills(7L, "github", "octocat");
+
+        ArgumentCaptor<StudentProfile> captor = ArgumentCaptor.forClass(StudentProfile.class);
+        verify(studentRepository).save(captor.capture());
+        assertThat(captor.getValue().getVerifiedSkills()).containsOnly("Java").doesNotContainNull();
+    }
 
     @Test
     void importSourcesAreDistinct() {
