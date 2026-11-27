@@ -48,9 +48,10 @@ public class GitHubSkillAdapter implements ResearchDataAdapter {
      * Curated sample profiles used by offline mode, keyed by GitHub username. These are the only handles
      * offline mode answers for; any other handle yields an empty list. Keys are matched case-insensitively.
      *
-     * <p>The keys beginning {@code demo-} are the students seeded by {@code config/DataSeeder}, so "Import
-     * from GitHub" works on a fresh checkout. All of this is fictional sample data, labelled as such by
-     * {@link ImportedEvidence#asFixture}.
+     * <p>Every key is a student seeded by {@code config/DataSeeder}, so "Import from GitHub" works on a fresh
+     * checkout. No real third-party account appears here: a fixture for a stranger's handle would be sample
+     * data attributed to someone who never agreed to it, and its confidence figures would be invented. All of
+     * this is fictional sample data, labelled as such by {@link ImportedEvidence#asFixture}.
      */
     static final Map<String, List<ImportedEvidence>> OFFLINE_FIXTURES = Map.of(
             "demo-mei-ling-ho", List.of(
@@ -69,11 +70,7 @@ public class GitHubSkillAdapter implements ResearchDataAdapter {
                     new ImportedEvidence("Java", "demo-sze-wing-lau/vision-lab",
                             "OpenCV wrapper written in Java", 0.67),
                     new ImportedEvidence("C++", "demo-sze-wing-lau/opencv-sandbox",
-                            "image-filter experiments", 0.33)),
-            "octocat", List.of(
-                    new ImportedEvidence("JavaScript", "octocat/hello-world", "README greets a new world", 0.50),
-                    new ImportedEvidence("Ruby", "octocat/Spoon-Knife", "forked Git practice repository", 0.33),
-                    new ImportedEvidence("HTML", "octocat/octocat.github.io", "GitHub Pages site", 0.17)));
+                            "image-filter experiments", 0.33)));
 
     private static final String GITHUB_API = "https://api.github.com";
 
