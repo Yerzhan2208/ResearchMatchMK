@@ -95,6 +95,13 @@ class ApiControllerTest {
         mvc.perform(post("/api/session/role").param("role", "wizard"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));
+        mvc.perform(post("/api/session/role").param("role", " "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+        mvc.perform(post("/api/session/role"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+        org.mockito.Mockito.verifyNoInteractions(session);
     }
 
     // ---------------------------------------------------------------- discover + match
@@ -367,7 +374,12 @@ class ApiControllerTest {
     @Test
     void opportunitiesAndCandidatesDelegate() throws Exception {
         when(facade.opportunitiesForFaculty(3L)).thenReturn(List.of(new Opportunity(10L, 3L, "t", "d")));
-        when(facade.discoverCandidates(3L)).thenReturn(List.of(student()));
+        when(session.getRole()).thenReturn(DemoRoleSession.Role.PROFESSOR);
+        when(session.currentFaculty()).thenReturn(faculty());
+        StudentProfile optedIn = student();
+        org.assertj.core.api.Assertions.assertThat(optedIn.isSearchableByFaculty()).isFalse();
+        optedIn.setSearchableByFaculty(true);
+        when(facade.discoverCandidates(3L)).thenReturn(List.of(optedIn));
 
         mvc.perform(get("/api/faculties/3/opportunities"))
                 .andExpect(status().isOk())
@@ -375,6 +387,16 @@ class ApiControllerTest {
         mvc.perform(get("/api/faculties/3/candidates"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(7));
+    }
+
+    @Test
+    void candidatesRequireProfessorRoleAndMatchingFaculty() throws Exception {
+        when(session.getRole()).thenReturn(DemoRoleSession.Role.STUDENT, DemoRoleSession.Role.PROFESSOR);
+        when(session.currentFaculty()).thenReturn(faculty(), null);
+        mvc.perform(get("/api/faculties/3/candidates")).andExpect(status().isForbidden());
+        mvc.perform(get("/api/faculties/4/candidates")).andExpect(status().isForbidden());
+        mvc.perform(get("/api/faculties/3/candidates")).andExpect(status().isNotFound());
+        org.mockito.Mockito.verifyNoInteractions(facade);
     }
 
     // ---------------------------------------------------------------- profile + import

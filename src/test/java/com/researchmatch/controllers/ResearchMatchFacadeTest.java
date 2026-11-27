@@ -191,6 +191,15 @@ class ResearchMatchFacadeTest {
     // ---------------------------------------------------------------- skills
 
     @Test
+    void importWithNoEvidenceLeavesTheProfileAndEvidenceUntouched() {
+        when(studentRepository.findById(7L)).thenReturn(Optional.of(student()));
+
+        assertThat(facade.importSkills(7L, "github", "no-such-demo-fixture")).isEmpty();
+        verify(studentRepository, never()).save(any());
+        Mockito.verifyNoInteractions(skillEvidenceRepository);
+    }
+
+    @Test
     void importSkillsPersistsEvidenceAndPromotesVerifiedSkills() {
         ResearchDataAdapter adapter = Mockito.mock(ResearchDataAdapter.class);
         when(adapter.platformName()).thenReturn("github");

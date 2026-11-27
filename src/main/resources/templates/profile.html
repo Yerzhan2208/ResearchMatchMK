@@ -94,17 +94,16 @@
 
             <!-- Privacy opt-in: default off, explicit choice required. -->
             <div class="sm:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <label class="flex items-start gap-3 cursor-pointer">
-                    <input type="checkbox" name="searchableByFaculty" value="true"
-                           th:checked="${currentStudent.searchableByFaculty}"
-                           class="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"/>
-                    <span>
-                        <span class="block text-sm font-medium text-slate-800">Make my profile discoverable by faculty</span>
-                        <span class="block text-xs text-slate-500 mt-0.5">
-                            Private by default. When enabled, professors can find your profile when reviewing candidates.
-                        </span>
-                    </span>
-                </label>
+                <label for="searchableByFaculty" class="block text-sm font-medium text-slate-800">Faculty discovery</label>
+                <select id="searchableByFaculty" name="searchableByFaculty" aria-describedby="faculty-discovery-help"
+                        class="mt-1 rounded border-slate-300 text-sm">
+                    <option value="" selected>Keep current setting</option>
+                    <option value="true">Make my profile discoverable</option>
+                    <option value="false">Keep my profile private</option>
+                </select>
+                <p id="faculty-discovery-help" class="mt-1 text-xs text-slate-500">
+                    Private by default. When enabled, professors can find your profile in candidate discovery.
+                </p>
             </div>
 
             <div class="sm:col-span-2 flex justify-end">

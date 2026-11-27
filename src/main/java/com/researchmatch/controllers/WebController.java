@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -81,7 +82,7 @@ public class WebController {
     public String switchRole(@RequestParam("role") String role, RedirectAttributes redirect) {
         DemoRoleSession.Role target;
         try {
-            target = DemoRoleSession.Role.valueOf(role == null ? "" : role.trim().toUpperCase());
+            target = DemoRoleSession.Role.valueOf(role == null ? "" : role.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             redirect.addFlashAttribute("errorMessage", "Unknown role: " + role);
             return "redirect:/";
@@ -185,28 +186,27 @@ public class WebController {
                               @RequestParam(value = "githubUsername", required = false) String githubUsername,
                               @RequestParam(value = "interests", required = false) String interests,
                               @RequestParam(value = "claimedSkills", required = false) String claimedSkills,
-                              @RequestParam(value = "searchableByFaculty", required = false, defaultValue = "false")
-                              boolean searchableByFaculty,
+                              @RequestParam(value = "searchableByFaculty", required = false)
+                              Boolean searchableByFaculty,
+                              @RequestParam Map<String, String> submittedFields,
                               RedirectAttributes redirect) {
         StudentProfile existing = session.currentStudent();
         if (existing == null) {
             redirect.addFlashAttribute("errorMessage", "No demo student is available to edit.");
             return "redirect:/profile";
         }
-        StudentProfile toSave = new StudentProfile();
-        toSave.setId(existing.getId());
-        toSave.setName(name);
-        toSave.setEmail(email);
-        toSave.setMajor(major);
-        toSave.setAcademicYear(academicYear);
-        toSave.setHoursPerWeek(hoursPerWeek);
-        toSave.setGithubUsername(githubUsername);
-        toSave.setInterests(splitCsvSet(interests));
-        toSave.setClaimedSkills(splitCsvSet(claimedSkills));
-        toSave.setVerifiedSkills(existing.getVerifiedSkills());
-        toSave.setSearchableByFaculty(searchableByFaculty);
         try {
-            facade.saveStudent(toSave);
+            facade.updateStudentProfile(existing.getId(), profile -> {
+                if (name != null) profile.setName(name);
+                if (email != null) profile.setEmail(email);
+                if (major != null) profile.setMajor(major);
+                if (submittedFields.containsKey("academicYear")) profile.setAcademicYear(academicYear);
+                if (submittedFields.containsKey("hoursPerWeek")) profile.setHoursPerWeek(hoursPerWeek);
+                if (githubUsername != null) profile.setGithubUsername(githubUsername);
+                if (interests != null) profile.setInterests(splitCsvSet(interests));
+                if (claimedSkills != null) profile.setClaimedSkills(splitCsvSet(claimedSkills));
+                if (searchableByFaculty != null) profile.setSearchableByFaculty(searchableByFaculty);
+            });
             redirect.addFlashAttribute("successMessage", "Profile saved.");
         } catch (ResearchMatchException e) {
             redirect.addFlashAttribute("errorMessage", e.getMessage());
@@ -249,6 +249,9 @@ public class WebController {
 
     @GetMapping("/professor")
     public String professor(@RequestParam(value = "q", required = false) String q, Model model) {
+        if (session.isStudentView()) {
+            return "redirect:/discover";
+        }
         commonAttributes(model);
         FacultyProfile faculty = session.currentFaculty();
         List<Opportunity> opportunities = faculty == null ? List.of() : facade.opportunitiesForFaculty(faculty.getId());

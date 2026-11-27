@@ -17,7 +17,8 @@ import java.util.List;
  * <p>There is deliberately no authentication (see the project brief): a single demo visitor can flip between
  * the <em>student</em> and <em>professor</em> views. This component remembers the chosen role and the resolved
  * demo student/faculty ids for the browser session. It holds no business rules; it only resolves and caches
- * identities so controllers stay thin.
+ * identities so controllers stay thin. The selected view gates the professor dashboard and candidate API;
+ * it is demo navigation state, not authentication.
  */
 @Component
 @SessionScope

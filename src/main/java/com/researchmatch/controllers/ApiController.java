@@ -21,10 +21,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -60,7 +62,7 @@ public class ApiController {
 
     @PostMapping("/session/role")
     public Map<String, Object> switchRole(@RequestParam("role") String role) {
-        DemoRoleSession.Role target = DemoRoleSession.Role.valueOf(role.trim().toUpperCase());
+        DemoRoleSession.Role target = DemoRoleSession.Role.valueOf(role.trim().toUpperCase(Locale.ROOT));
         session.setRole(target);
         return Map.of("role", target.name());
     }
@@ -163,7 +165,17 @@ public class ApiController {
 
     @GetMapping("/faculties/{id}/candidates")
     public List<StudentProfile> candidates(@PathVariable("id") Long facultyId) {
-        return facade.discoverCandidates(facultyId);
+        if (session.getRole() != DemoRoleSession.Role.PROFESSOR) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Switch to the professor view to see candidates.");
+        }
+        FacultyProfile faculty = session.currentFaculty();
+        if (faculty == null) {
+            throw new com.researchmatch.config.ResourceNotFoundException("No demo faculty available");
+        }
+        if (!facultyId.equals(faculty.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Candidates are scoped to the current demo faculty.");
+        }
+        return facade.discoverCandidates(faculty.getId());
     }
 
     // ---------------------------------------------------------------- profile + import
