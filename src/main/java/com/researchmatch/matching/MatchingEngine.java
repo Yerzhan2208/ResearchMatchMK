@@ -50,12 +50,13 @@ public class MatchingEngine {
     }
 
     /**
-     * Assembles Eligibility → Semantic → Evidence → Explanation. The {@code SemanticMatchHandler} shares the
-     * engine's {@link SystemConfigManager} so weight resolution is consistent.
+     * Assembles Eligibility → Semantic → Evidence → Explanation. The {@code SemanticMatchHandler} and
+     * {@code EvidenceScoreHandler} share the engine's {@link SystemConfigManager} so weight resolution is
+     * consistent across both scoring layers.
      */
     private static MatchLayerHandler buildChain(SystemConfigManager config) {
         MatchLayerHandler explanation = new ExplanationHandler();
-        MatchLayerHandler evidence = new EvidenceScoreHandler();
+        MatchLayerHandler evidence = new EvidenceScoreHandler(config);
         MatchLayerHandler semantic = new SemanticMatchHandler(config);
         MatchLayerHandler eligibility = new EligibilityFilterHandler();
         return link(eligibility, link(semantic, link(evidence, explanation)));

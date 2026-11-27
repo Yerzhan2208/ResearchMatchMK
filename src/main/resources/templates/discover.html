@@ -60,7 +60,7 @@
                         <div>
                             <dt class="text-slate-400 text-xs uppercase tracking-wide">Fit score</dt>
                             <dd class="font-semibold"
-                                th:text="${#numbers.formatDecimal(item.match.totalScore, 1, 2)}">0.00</dd>
+                                th:text="${#numbers.formatDecimal(item.match.totalScore * 100, 1, 0)} + '%'">0%</dd>
                         </div>
                         <div>
                             <dt class="text-slate-400 text-xs uppercase tracking-wide">Hours / week</dt>

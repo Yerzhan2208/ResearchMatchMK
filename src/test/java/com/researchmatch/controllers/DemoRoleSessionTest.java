@@ -69,7 +69,17 @@ class DemoRoleSessionTest {
 
         StudentProfile result = session.currentStudent();
         assertThat(result.getId()).isEqualTo(9L);
-        verify(studentRepository).save(any(StudentProfile.class));
+
+        // The seeded demo student must carry realistic interests/claimed skills so the feed scores non-zero.
+        org.mockito.ArgumentCaptor<StudentProfile> captor =
+                org.mockito.ArgumentCaptor.forClass(StudentProfile.class);
+        verify(studentRepository).save(captor.capture());
+        StudentProfile seeded = captor.getValue();
+        assertThat(seeded.getInterests()).isNotEmpty();
+        assertThat(seeded.getClaimedSkills()).isNotEmpty();
+        // Honesty: only real external lookups may mark skills verified; seeding must not fake evidence.
+        assertThat(seeded.getVerifiedSkills()).isEmpty();
+        assertThat(seeded.isSearchableByFaculty()).isFalse();
     }
 
     @Test

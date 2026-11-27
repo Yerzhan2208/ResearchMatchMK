@@ -61,7 +61,8 @@ Keys (`static final String` constants on the class):
 | Constant | Key | Default |
 | --- | --- | --- |
 | `KEY_MIN_BRANCH_COVERAGE` | `coverage.minBranch` | `0.85` |
-| `KEY_SEMANTIC_WEIGHT` | `matching.semanticWeight` | `0.30` |
+| `KEY_SEMANTIC_WEIGHT` | `matching.semanticWeight` | `0.70` |
+| `KEY_EVIDENCE_WEIGHT` | `matching.evidenceWeight` | `0.30` |
 | `KEY_MAX_MATCH_RESULTS` | `matching.maxResults` | `20` |
 | `KEY_ALLOW_FACULTY_SEARCH` | `privacy.allowFacultySearch` | `false` |
 
@@ -69,6 +70,23 @@ Resolution order: built-in defaults → `src/main/resources/system-config.json` 
 
 > House style for the team: match weights are **weights**, not raw points; `SemanticMatchHandler` should
 > scale by `matching.semanticWeight`.
+
+### Scoring model (Member 2)
+
+`totalScore` is a normalised weighted sum of the two scoring layers, so it stays in `[0, 1]`:
+
+```
+totalScore = semanticWeight * semanticScore_norm + evidenceWeight * evidenceScore_norm
+```
+
+- `semanticScore_norm = similarity ∈ [0, 1]` — `SemanticMatchHandler` contribution
+  `similarity * semanticWeight`.
+- `evidenceScore_norm = min(verifiedMatches * BONUS_PER_VERIFIED_SKILL, MAX_BONUS) / MAX_BONUS ∈ [0, 1]` —
+  `EvidenceScoreHandler` contribution `normalized * evidenceWeight`. The `2.0`-per-skill / `10.0`-cap scale is
+  preserved; only the contribution is normalised.
+- Weights are resolved and validated by `matching/ScoringWeights`: both must be **non-negative** and sum to
+  `1.0` (tolerance `1e-9`). Invalid configuration logs a warning and falls back to `0.70 / 0.30`.
+- Eligibility is a **hard filter**, not a score component — there is deliberately no base eligibility bonus.
 
 ---
 
@@ -508,6 +526,7 @@ Circular dependency risk: none. `models`/`repository` ← everyone; `matching` �
 | baseline | Initial contracts (this file) | Member 1 |
 | schema-1 | Added `Opportunity.minAcademicYear` (default `1`, 4-arg constructor preserved) + `OpportunityBuilder.minAcademicYear(Integer)`; documented `StudentProfile.academicYear` (1–4) and the Layer 1 eligibility rule | Member 1 |
 | adapters-1 | Offline mode narrowed to a curated fixture map: unknown handles/author ids return empty instead of hash-derived fabricated evidence; added `ResearchDataAdapter.OFFLINE_SNIPPET_PREFIX` / `FIXTURE_SOURCE_PREFIX` and `ImportedEvidence#isSampleData()` so sample data is visibly labelled; fixture keys aligned with `DataSeeder` (seeded students + Prof. Wei Chan's OpenAlex id, areas mirrored) and unused invented ids dropped. **`ResearchMatchFacade#importSkills` no longer promotes sample-data rows into `verifiedSkills`** (Member 4's file, changed with the group's agreement that fixture data must not become a verified credential) | Member 3, **pending group ratification** |
+| scoring-1 | Normalised scoring (issues #19, #20): `totalScore = semanticWeight*semantic + evidenceWeight*evidence` with both components in `[0,1]`. `matching.semanticWeight` default raised `0.30 → 0.70`; new key `matching.evidenceWeight` (default `0.30`); evidence bonus normalised by `MAX_BONUS` (keeps `2.0`/`10.0` scale and cap). New `matching/ScoringWeights` validates both weights (non-negative, sum `1.0`) with fallback + warning. No API signature changed. | Member 1 (config) + Member 4 (demo/UI), approved by user |
 
 ---
 

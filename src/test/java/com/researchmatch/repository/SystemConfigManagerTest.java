@@ -16,7 +16,8 @@ class SystemConfigManagerTest {
     void exposesSeededConfiguration() {
         SystemConfigManager config = SystemConfigManager.getInstance();
 
-        assertThat(config.getDouble(SystemConfigManager.KEY_SEMANTIC_WEIGHT, -1)).isEqualTo(0.30);
+        assertThat(config.getDouble(SystemConfigManager.KEY_SEMANTIC_WEIGHT, -1)).isEqualTo(0.70);
+        assertThat(config.getDouble(SystemConfigManager.KEY_EVIDENCE_WEIGHT, -1)).isEqualTo(0.30);
         assertThat(config.getInt(SystemConfigManager.KEY_MAX_MATCH_RESULTS, -1)).isEqualTo(20);
         assertThat(config.getDouble(SystemConfigManager.KEY_MIN_BRANCH_COVERAGE, -1)).isEqualTo(0.85);
         assertThat(config.getBoolean(SystemConfigManager.KEY_ALLOW_FACULTY_SEARCH, true)).isFalse();

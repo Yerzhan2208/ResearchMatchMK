@@ -87,7 +87,7 @@ class SystemConfigManagerLoadingTest {
     void nullClassLoaderUsesOwnLoader() {
         SystemConfigManager config = new SystemConfigManager((ClassLoader) null);
 
-        assertThat(config.getDouble(SystemConfigManager.KEY_SEMANTIC_WEIGHT, -1)).isEqualTo(0.30);
+        assertThat(config.getDouble(SystemConfigManager.KEY_SEMANTIC_WEIGHT, -1)).isEqualTo(0.70);
     }
 
     @Test
@@ -145,7 +145,7 @@ class SystemConfigManagerLoadingTest {
                 .getCodeSource().getLocation().toURI());
         try (URLClassLoader loader = new URLClassLoader(new URL[] {classes.toUri().toURL()}, null)) {
             assertThat(SystemConfigManager.loadFromResource(loader))
-                    .containsEntry(SystemConfigManager.KEY_SEMANTIC_WEIGHT, "0.3");
+                    .containsEntry(SystemConfigManager.KEY_SEMANTIC_WEIGHT, "0.7");
         }
         assertThat(Files.exists(classes.resolve("system-config.json"))).isTrue();
     }

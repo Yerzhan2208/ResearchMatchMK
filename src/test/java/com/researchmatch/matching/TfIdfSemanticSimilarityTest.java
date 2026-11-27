@@ -150,6 +150,9 @@ class TfIdfSemanticSimilarityTest {
         double weight = 0.75;
         SystemConfigManager mocked = Mockito.mock(SystemConfigManager.class);
         Mockito.when(mocked.getDouble(eq(SystemConfigManager.KEY_SEMANTIC_WEIGHT), anyDouble())).thenReturn(weight);
+        // Keep semantic + evidence == 1 so weight resolution doesn't fall back to defaults.
+        Mockito.when(mocked.getDouble(eq(SystemConfigManager.KEY_EVIDENCE_WEIGHT), anyDouble()))
+                .thenReturn(1.0 - weight);
 
         SemanticSimilarity fixed = new SemanticSimilarity() {
             @Override

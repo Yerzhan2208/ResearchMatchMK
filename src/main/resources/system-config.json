@@ -1,6 +1,7 @@
 {
   "coverage.minBranch": 0.85,
   "matching.maxResults": 20,
-  "matching.semanticWeight": 0.30,
+  "matching.semanticWeight": 0.70,
+  "matching.evidenceWeight": 0.30,
   "privacy.allowFacultySearch": false
 }

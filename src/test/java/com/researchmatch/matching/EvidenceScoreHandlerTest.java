@@ -38,6 +38,13 @@ class EvidenceScoreHandlerTest {
         return context.getLayerScores().get(EvidenceScoreHandler.LAYER);
     }
 
+    /** Expected contribution for {@code verifiedMatches} verified skills: (raw/MAX_BONUS) * evidenceWeight. */
+    private static double expected(int verifiedMatches) {
+        double raw = Math.min(verifiedMatches * EvidenceScoreHandler.BONUS_PER_VERIFIED_SKILL,
+                EvidenceScoreHandler.MAX_BONUS);
+        return (raw / EvidenceScoreHandler.MAX_BONUS) * ScoringWeights.DEFAULT_EVIDENCE_WEIGHT;
+    }
+
     // ---------------------------------------------------------------- normal
 
     @Test
@@ -48,7 +55,7 @@ class EvidenceScoreHandlerTest {
 
         assertThat(context.getMatchedSkills()).containsExactly("java");
         assertThat(context.getMissingSkills()).isEmpty();
-        assertThat(score(context)).isEqualTo(EvidenceScoreHandler.BONUS_PER_VERIFIED_SKILL);
+        assertThat(score(context)).isCloseTo(expected(1), org.assertj.core.data.Offset.offset(1e-9));
     }
 
     @Test
@@ -80,7 +87,7 @@ class EvidenceScoreHandlerTest {
 
         assertThat(context.getMatchedSkills()).containsExactly("kotlin");
         assertThat(context.getMissingSkills()).isEmpty();
-        assertThat(score(context)).isEqualTo(EvidenceScoreHandler.BONUS_PER_VERIFIED_SKILL);
+        assertThat(score(context)).isCloseTo(expected(1), org.assertj.core.data.Offset.offset(1e-9));
     }
 
     @Test
@@ -92,7 +99,7 @@ class EvidenceScoreHandlerTest {
         assertThat(context.getMatchedSkills()).containsExactlyInAnyOrder("java", "python", "sql");
         assertThat(context.getMissingSkills()).containsExactly("go");
         // Java + Python verified ⇒ 2 * bonus; SQL is claimed only ⇒ no extra.
-        assertThat(score(context)).isEqualTo(2 * EvidenceScoreHandler.BONUS_PER_VERIFIED_SKILL);
+        assertThat(score(context)).isCloseTo(expected(2), org.assertj.core.data.Offset.offset(1e-9));
     }
 
     @Test
@@ -102,7 +109,7 @@ class EvidenceScoreHandlerTest {
                 student(Set.of(), verified),
                 opportunity(verified, Set.of()));
 
-        assertThat(score(context)).isEqualTo(EvidenceScoreHandler.MAX_BONUS);
+        assertThat(score(context)).isCloseTo(expected(7), org.assertj.core.data.Offset.offset(1e-9));
     }
 
     @Test
@@ -112,7 +119,7 @@ class EvidenceScoreHandlerTest {
                 opportunity(Set.of("JAVA"), Set.of()));
 
         assertThat(context.getMatchedSkills()).containsExactly("java");
-        assertThat(score(context)).isEqualTo(EvidenceScoreHandler.BONUS_PER_VERIFIED_SKILL);
+        assertThat(score(context)).isCloseTo(expected(1), org.assertj.core.data.Offset.offset(1e-9));
     }
 
     @Test
@@ -171,6 +178,6 @@ class EvidenceScoreHandlerTest {
                 opportunity(Set.of("Java"), Set.of()));
 
         assertThat(context.getMatchedSkills()).containsExactly("java");
-        assertThat(score(context)).isEqualTo(EvidenceScoreHandler.BONUS_PER_VERIFIED_SKILL);
+        assertThat(score(context)).isCloseTo(expected(1), org.assertj.core.data.Offset.offset(1e-9));
     }
 }

@@ -151,7 +151,7 @@ public class DataSeeder implements CommandLineRunner {
     private void seedStudents() {
         studentRepository.saveAll(List.of(
                 student("Mei-Ling Ho", "mei-ling.ho@my.cityu.edu.hk", "Computer Science", 3, 12,
-                        Set.of("NLP", "Data Mining"), Set.of("Python", "SQL"), "demo-mei-ling-ho"),
+                        Set.of("NLP", "Data Mining"), Set.of("Python", "SQL"), Set.of("Python"), "demo-mei-ling-ho"),
                 student("Arjun Patel", "arjun.patel@my.cityu.edu.hk", "Data Science", 2, 10,
                         Set.of("Machine Learning"), Set.of("Python", "Pandas"), "demo-arjun-patel"),
                 student("Sze-Wing Lau", "szewing.lau@my.cityu.edu.hk", "Computer Science", 4, 8,
@@ -169,10 +169,20 @@ public class DataSeeder implements CommandLineRunner {
     private static StudentProfile student(String name, String email, String major, int academicYear,
                                           int hoursPerWeek, Set<String> interests, Set<String> claimedSkills,
                                           String githubUsername) {
+        return student(name, email, major, academicYear, hoursPerWeek, interests, claimedSkills,
+                Set.of(), githubUsername);
+    }
+
+    private static StudentProfile student(String name, String email, String major, int academicYear,
+                                          int hoursPerWeek, Set<String> interests, Set<String> claimedSkills,
+                                          Set<String> verifiedSkills, String githubUsername) {
         StudentProfile student = new StudentProfile(null, name, email, major, academicYear, hoursPerWeek,
                 githubUsername);
         student.setInterests(new LinkedHashSet<>(interests));
         student.setClaimedSkills(new LinkedHashSet<>(claimedSkills));
+        // Seeded verified skills are deliberate demo fixtures (not live-imported); they let the demo and
+        // tests exercise the evidence layer. Sample GitHub imports remain unverified (see ResearchMatchFacade).
+        student.setVerifiedSkills(new LinkedHashSet<>(verifiedSkills));
         // Privacy rule: sample data never opts a student in; only the student may do that.
         student.setSearchableByFaculty(false);
         return student;
