@@ -620,4 +620,106 @@ class WebControllerTest {
                 .andExpect(view().name("error"))
                 .andExpect(model().attribute("message", "bad"));
     }
+
+    // ---------------------------------------------------------------- stage 4: UI polish
+
+    private Application appForOpp10() {
+        Application a = new Application(1L, 7L, 10L);
+        a.setStatus(Application.Status.NEW);
+        return a;
+    }
+
+    @Test
+    void discoverExposesAppliedOpportunityIds() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.recommend(anyLong(), any())).thenReturn(List.of());
+        when(facade.applicationsForStudent(7L)).thenReturn(List.of(appForOpp10()));
+        when(facade.getOpportunity(10L)).thenReturn(new Opportunity(10L, 3L, "NLP", "d"));
+
+        org.springframework.test.web.servlet.MvcResult result = mvc.perform(get("/discover"))
+                .andExpect(status().isOk())
+                .andReturn();
+        @SuppressWarnings("unchecked")
+        java.util.Set<Long> ids =
+                (java.util.Set<Long>) result.getModelAndView().getModel().get("appliedOpportunityIds");
+        assertThat(ids).contains(10L);
+        assertThat(result.getModelAndView().getModel().get("applications")).isNotNull();
+    }
+
+    @Test
+    void discoverApplicationViewsPairTitle() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.recommend(anyLong(), any())).thenReturn(List.of());
+        when(facade.applicationsForStudent(7L)).thenReturn(List.of(appForOpp10()));
+        when(facade.getOpportunity(10L)).thenReturn(new Opportunity(10L, 3L, "NLP", "d"));
+
+        org.springframework.test.web.servlet.MvcResult result = mvc.perform(get("/discover"))
+                .andExpect(status().isOk())
+                .andReturn();
+        @SuppressWarnings("unchecked")
+        List<ApplicationView> views =
+                (List<ApplicationView>) result.getModelAndView().getModel().get("applications");
+        assertThat(views).hasSize(1);
+        assertThat(views.get(0).opportunityTitle()).isEqualTo("NLP");
+    }
+
+    @Test
+    void discoverApplicationViewsFallbackTitleNull() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.recommend(anyLong(), any())).thenReturn(List.of());
+        when(facade.applicationsForStudent(7L)).thenReturn(List.of(appForOpp10()));
+        when(facade.getOpportunity(10L)).thenThrow(new ResourceNotFoundException("gone"));
+
+        org.springframework.test.web.servlet.MvcResult result = mvc.perform(get("/discover"))
+                .andExpect(status().isOk())
+                .andReturn();
+        @SuppressWarnings("unchecked")
+        List<ApplicationView> views =
+                (List<ApplicationView>) result.getModelAndView().getModel().get("applications");
+        assertThat(views).hasSize(1);
+        assertThat(views.get(0).opportunityTitle()).isNull();
+    }
+
+    @Test
+    void professorFilterParamNarrowsCandidates() throws Exception {
+        StudentProfile ada = student();
+        StudentProfile bob = new StudentProfile();
+        bob.setId(8L);
+        bob.setName("Bob");
+        bob.setClaimedSkills(java.util.Set.of("Rust"));
+        when(session.currentFaculty()).thenReturn(faculty());
+        when(facade.opportunitiesForFaculty(3L)).thenReturn(List.of());
+        when(facade.discoverCandidates(3L)).thenReturn(List.of(ada, bob));
+
+        org.springframework.test.web.servlet.MvcResult result =
+                mvc.perform(get("/professor").param("q", "ada"))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        @SuppressWarnings("unchecked")
+        List<StudentProfile> candidates =
+                (List<StudentProfile>) result.getModelAndView().getModel().get("candidates");
+        assertThat(candidates).hasSize(1);
+        assertThat(candidates.get(0).getName()).isEqualTo("Ada");
+        assertThat(result.getModelAndView().getModel().get("candidateQuery")).isEqualTo("ada");
+    }
+
+    @Test
+    void professorBlankQueryReturnsAllCandidates() throws Exception {
+        StudentProfile ada = student();
+        StudentProfile bob = new StudentProfile();
+        bob.setId(8L);
+        bob.setName("Bob");
+        when(session.currentFaculty()).thenReturn(faculty());
+        when(facade.opportunitiesForFaculty(3L)).thenReturn(List.of());
+        when(facade.discoverCandidates(3L)).thenReturn(List.of(ada, bob));
+
+        org.springframework.test.web.servlet.MvcResult result = mvc.perform(get("/professor"))
+                .andExpect(status().isOk())
+                .andReturn();
+        @SuppressWarnings("unchecked")
+        List<StudentProfile> candidates =
+                (List<StudentProfile>) result.getModelAndView().getModel().get("candidates");
+        assertThat(candidates).hasSize(2);
+        assertThat(result.getModelAndView().getModel().get("candidateQuery")).isEqualTo("");
+    }
 }

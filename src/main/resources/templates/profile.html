@@ -12,6 +12,15 @@
         <h1 class="text-2xl font-semibold">My Profile</h1>
         <p class="text-sm text-slate-500 mt-1">Keep your details current to improve match quality.</p>
 
+        <div th:if="${currentStudent != null and currentStudent.searchableByFaculty}"
+             class="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            Your profile is discoverable by faculty.
+        </div>
+        <div th:if="${currentStudent != null and !currentStudent.searchableByFaculty}"
+             class="mt-3 rounded-lg border border-slate-200 bg-slate-100 px-4 py-3 text-sm text-slate-700">
+            Your profile is private.
+        </div>
+
         <div th:if="${currentStudent == null}" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
             No demo student profile is available.
         </div>
@@ -59,6 +68,28 @@
                 <input id="claimedSkills" name="claimedSkills"
                        th:value="${currentStudent.claimedSkills != null ? #strings.listJoin(currentStudent.claimedSkills, ', ') : ''}"
                        class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
+            </div>
+            <div class="sm:col-span-2 grid sm:grid-cols-2 gap-4">
+                <div class="rounded-lg border border-slate-200 p-4">
+                    <h3 class="text-sm font-medium text-slate-700 mb-2">Verified skills</h3>
+                    <p th:if="${currentStudent.verifiedSkills == null or #sets.isEmpty(currentStudent.verifiedSkills)}"
+                       class="text-sm text-slate-400">No verified skills yet.</p>
+                    <div th:unless="${currentStudent.verifiedSkills == null or #sets.isEmpty(currentStudent.verifiedSkills)}"
+                         class="flex flex-wrap gap-1">
+                        <span th:each="sk : ${currentStudent.verifiedSkills}"
+                              class="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700" th:text="${sk}">skill</span>
+                    </div>
+                </div>
+                <div class="rounded-lg border border-slate-200 p-4">
+                    <h3 class="text-sm font-medium text-slate-700 mb-2">Claimed skills</h3>
+                    <p th:if="${currentStudent.claimedSkills == null or #sets.isEmpty(currentStudent.claimedSkills)}"
+                       class="text-sm text-slate-400">No claimed skills yet.</p>
+                    <div th:unless="${currentStudent.claimedSkills == null or #sets.isEmpty(currentStudent.claimedSkills)}"
+                         class="flex flex-wrap gap-1">
+                        <span th:each="sk : ${currentStudent.claimedSkills}"
+                              class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600" th:text="${sk}">skill</span>
+                    </div>
+                </div>
             </div>
 
             <!-- Privacy opt-in: default off, explicit choice required. -->

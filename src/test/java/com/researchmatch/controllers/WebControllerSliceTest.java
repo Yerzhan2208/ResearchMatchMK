@@ -190,4 +190,139 @@ class WebControllerSliceTest {
                 .andExpect(content().string(containsString("Something went wrong")))
                 .andExpect(content().string(containsString("Status 500")));
     }
+    // ---------------------------------------------------------------- stage 4: UI polish
+
+    private StudentProfile bob() {
+        StudentProfile b = new StudentProfile(8L, "Bob", "bob@example.com", "CS", 2, 8, "bobcat");
+        b.setVerifiedSkills(Set.of("Python"));
+        return b;
+    }
+
+    @Test
+    void discoverShowsApplicationTitleAndAppliedBadge() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(session.currentFaculty()).thenReturn(faculty());
+        when(session.getRole()).thenReturn(DemoRoleSession.Role.STUDENT);
+        when(session.isStudentView()).thenReturn(true);
+        when(facade.recommend(eq(7L), any())).thenReturn(List.of(match()));
+        when(facade.getOpportunity(10L)).thenReturn(opportunity());
+        when(facade.applicationsForStudent(7L)).thenReturn(List.of(app()));
+
+        mvc.perform(get("/discover"))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("appliedOpportunityIds", org.hamcrest.Matchers.contains(10L)))
+                .andExpect(content().string(containsString("My applications")))
+                .andExpect(content().string(containsString("Applied")));
+    }
+
+    @Test
+    void discoverApplicationRowFallsBackToIdWhenTitleMissing() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(session.currentFaculty()).thenReturn(faculty());
+        when(session.getRole()).thenReturn(DemoRoleSession.Role.STUDENT);
+        when(session.isStudentView()).thenReturn(true);
+        when(facade.recommend(eq(7L), any())).thenReturn(List.of());
+        when(facade.getOpportunity(10L)).thenThrow(new com.researchmatch.config.ResourceNotFoundException("gone"));
+        when(facade.applicationsForStudent(7L)).thenReturn(List.of(app()));
+
+        mvc.perform(get("/discover"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("#1")));
+    }
+
+    @Test
+    void profileShowsVerifiedAndClaimedSkills() throws Exception {
+        StudentProfile s = student();
+        s.setVerifiedSkills(Set.of("Java"));
+        s.setClaimedSkills(Set.of("Python"));
+        when(session.currentStudent()).thenReturn(s);
+        when(session.currentFaculty()).thenReturn(faculty());
+        when(session.getRole()).thenReturn(DemoRoleSession.Role.STUDENT);
+        when(session.isStudentView()).thenReturn(true);
+        when(facade.evidenceFor(7L)).thenReturn(List.of());
+        when(facade.importSources()).thenReturn(List.of("github"));
+
+        mvc.perform(get("/profile"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Verified skills")))
+                .andExpect(content().string(containsString("Claimed skills")))
+                .andExpect(content().string(containsString("Java")))
+                .andExpect(content().string(containsString("Python")));
+    }
+
+    @Test
+    void profileShowsPrivateBannerByDefault() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(session.currentFaculty()).thenReturn(faculty());
+        when(session.getRole()).thenReturn(DemoRoleSession.Role.STUDENT);
+        when(session.isStudentView()).thenReturn(true);
+        when(facade.evidenceFor(7L)).thenReturn(List.of());
+        when(facade.importSources()).thenReturn(List.of());
+
+        mvc.perform(get("/profile"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Your profile is private.")));
+    }
+
+    @Test
+    void profileShowsDiscoverableBannerWhenOptedIn() throws Exception {
+        StudentProfile s = student();
+        s.setSearchableByFaculty(true);
+        when(session.currentStudent()).thenReturn(s);
+        when(session.currentFaculty()).thenReturn(faculty());
+        when(session.getRole()).thenReturn(DemoRoleSession.Role.STUDENT);
+        when(session.isStudentView()).thenReturn(true);
+        when(facade.evidenceFor(7L)).thenReturn(List.of());
+        when(facade.importSources()).thenReturn(List.of());
+
+        mvc.perform(get("/profile"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Your profile is discoverable by faculty.")));
+    }
+
+    @Test
+    void professorFilterNarrowsCandidates() throws Exception {
+        when(session.currentFaculty()).thenReturn(faculty());
+        when(session.currentStudent()).thenReturn(student());
+        when(session.getRole()).thenReturn(DemoRoleSession.Role.PROFESSOR);
+        when(session.isStudentView()).thenReturn(false);
+        when(facade.opportunitiesForFaculty(3L)).thenReturn(List.of());
+        StudentProfile ada = student();
+        ada.setVerifiedSkills(Set.of("Java"));
+        when(facade.discoverCandidates(3L)).thenReturn(List.of(ada, bob()));
+
+        mvc.perform(get("/professor").param("q", "java"))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("candidateQuery", "java"))
+                .andExpect(content().string(containsString("Ada")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Bob"))));
+    }
+
+    @Test
+    void professorEmptyQueryReturnsAll() throws Exception {
+        when(session.currentFaculty()).thenReturn(faculty());
+        when(session.currentStudent()).thenReturn(student());
+        when(session.getRole()).thenReturn(DemoRoleSession.Role.PROFESSOR);
+        when(session.isStudentView()).thenReturn(false);
+        when(facade.opportunitiesForFaculty(3L)).thenReturn(List.of());
+        when(facade.discoverCandidates(3L)).thenReturn(List.of(student(), bob()));
+
+        mvc.perform(get("/professor"))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("candidates", org.hamcrest.Matchers.hasSize(2)));
+    }
+
+    @Test
+    void professorFilterNoMatchShowsEmptyState() throws Exception {
+        when(session.currentFaculty()).thenReturn(faculty());
+        when(session.currentStudent()).thenReturn(student());
+        when(session.getRole()).thenReturn(DemoRoleSession.Role.PROFESSOR);
+        when(session.isStudentView()).thenReturn(false);
+        when(facade.opportunitiesForFaculty(3L)).thenReturn(List.of());
+        when(facade.discoverCandidates(3L)).thenReturn(List.of(student(), bob()));
+
+        mvc.perform(get("/professor").param("q", "zzz"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("No candidates match your filter.")));
+    }
 }
