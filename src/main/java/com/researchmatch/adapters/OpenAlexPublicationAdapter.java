@@ -132,10 +132,6 @@ public class OpenAlexPublicationAdapter implements ResearchDataAdapter {
                 .toList();
     }
 
-    private static double round(double value) {
-        return Math.round(Math.max(0.0, Math.min(1.0, value)) * 100.0) / 100.0;
-    }
-
     // ------------------------------------------------------------------ online mode
 
     private List<ImportedEvidence> remoteAreas(String authorId) {
@@ -201,7 +197,7 @@ public class OpenAlexPublicationAdapter implements ResearchDataAdapter {
                 area,
                 "openalex:" + authorId,
                 count + " of " + workCount + " indexed works are tagged " + area,
-                round((double) count / workCount))));
+                ImportedEvidence.confidenceFrom((double) count / workCount))));
         return evidence;
     }
 

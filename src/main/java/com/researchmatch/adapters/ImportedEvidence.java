@@ -55,4 +55,21 @@ public record ImportedEvidence(String skillName, String sourceName, String evide
     public boolean isSampleData() {
         return sourceName != null && sourceName.startsWith(ResearchDataAdapter.FIXTURE_SOURCE_PREFIX);
     }
+
+    /**
+     * Derives a {@code confidence} from a raw evidence ratio, the single definition of the rounding policy
+     * both adapters report with: clamped to {@code [0, 1]} and rounded to two decimal places, so
+     * {@code 2/3} becomes {@code 0.67} rather than {@code 0.6666666666666666}.
+     *
+     * <p>Clamping keeps a caller honest: a ratio derived from counts can never exceed 1, but a future
+     * caller that passes a pre-scaled or drifting value still produces a legal {@code confidence} instead
+     * of the {@link IllegalArgumentException} the canonical constructor would raise.
+     *
+     * @param value raw ratio, typically {@code matching / total}
+     * @return the value clamped to {@code [0, 1]} and rounded to two decimals
+     */
+    public static double confidenceFrom(double value) {
+        double clamped = Math.max(0.0, Math.min(1.0, value));
+        return Math.round(clamped * 100.0) / 100.0;
+    }
 }
