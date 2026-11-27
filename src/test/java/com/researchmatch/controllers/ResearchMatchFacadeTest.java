@@ -506,6 +506,213 @@ class ResearchMatchFacadeTest {
     }
 
     @Test
+    void saveStudentAcceptsValidHoursBoundary() {
+        StudentProfile one = student();
+        one.setHoursPerWeek(1);
+        StudentProfile max = student();
+        max.setHoursPerWeek(ResearchMatchFacade.MAX_HOURS_PER_WEEK);
+        when(studentRepository.findByEmail("ada@example.com")).thenReturn(Optional.empty());
+        when(studentRepository.save(any(StudentProfile.class))).thenAnswer(i -> i.getArgument(0));
+
+        assertThat(facade.saveStudent(one).getHoursPerWeek()).isEqualTo(1);
+        assertThat(facade.saveStudent(max).getHoursPerWeek()).isEqualTo(ResearchMatchFacade.MAX_HOURS_PER_WEEK);
+    }
+
+    @Test
+    void saveStudentRejectsDuplicateEmailForNewStudentWithNullId() {
+        StudentProfile incoming = student();
+        incoming.setId(null);
+        StudentProfile existing = new StudentProfile();
+        existing.setId(1L);
+        existing.setEmail("ada@example.com");
+        when(studentRepository.findByEmail("ada@example.com")).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> facade.saveStudent(incoming))
+                .isInstanceOf(DuplicateEntityException.class);
+    }
+
+    @Test
+    void saveStudentRejectsNullName() {
+        StudentProfile incoming = student();
+        incoming.setName(null);
+        assertThatThrownBy(() -> facade.saveStudent(incoming))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining("name");
+    }
+
+    @Test
+    void importSkillsHandlesNullVerifiedSkills() {
+        ResearchDataAdapter adapter = Mockito.mock(ResearchDataAdapter.class);
+        when(adapter.platformName()).thenReturn("github");
+        when(adapter.importEvidence("octocat"))
+                .thenReturn(List.of(new ImportedEvidence("Java", "repo", "snip", 0.5)));
+        ResearchMatchFacade custom = new ResearchMatchFacade(studentRepository, facultyRepository,
+                opportunityRepository, applicationRepository, skillEvidenceRepository, matchingEngine,
+                recruitmentPipeline, new AdapterRegistry(List.of(adapter)));
+
+        StudentProfile target = student();
+        target.setVerifiedSkills(null);
+        when(studentRepository.findById(7L)).thenReturn(Optional.of(target));
+        when(skillEvidenceRepository.saveAll(anyList())).thenAnswer(i -> i.getArgument(0));
+        when(studentRepository.save(any(StudentProfile.class))).thenAnswer(i -> i.getArgument(0));
+
+        List<SkillEvidence> imported = custom.importSkills(7L, "github", "octocat");
+
+        assertThat(imported).extracting(SkillEvidence::getSkillName).containsExactly("Java");
+        verify(studentRepository).save(any(StudentProfile.class));
+        assertThat(target.getVerifiedSkills()).contains("Java");
+    }
+
+    @Test
+    void importSkillsSkipsBlankSkillNames() {
+        ResearchDataAdapter adapter = Mockito.mock(ResearchDataAdapter.class);
+        when(adapter.platformName()).thenReturn("github");
+        when(adapter.importEvidence("octocat"))
+                .thenReturn(List.of(new ImportedEvidence("Java", "repo", "snip", 0.5)));
+        ResearchMatchFacade custom = new ResearchMatchFacade(studentRepository, facultyRepository,
+                opportunityRepository, applicationRepository, skillEvidenceRepository, matchingEngine,
+                recruitmentPipeline, new AdapterRegistry(List.of(adapter)));
+
+        StudentProfile target = student();
+        SkillEvidence blank = new SkillEvidence(1L, 7L, "  ", "r", "s");
+        SkillEvidence java = new SkillEvidence(2L, 7L, "Java", "r", "s");
+        java.setVerifiedByStudent(true);
+        when(studentRepository.findById(7L)).thenReturn(Optional.of(target));
+        when(skillEvidenceRepository.saveAll(anyList())).thenReturn(List.of(blank, java));
+        when(studentRepository.save(any(StudentProfile.class))).thenAnswer(i -> i.getArgument(0));
+
+        custom.importSkills(7L, "github", "octocat");
+
+        assertThat(target.getVerifiedSkills()).containsExactly("Java");
+    }
+
+    @Test
+    void discoverCandidatesHandlesNullOpportunityList() {
+        when(facultyRepository.findById(3L)).thenReturn(Optional.of(new FacultyProfile()));
+        StudentProfile searchable = student();
+        when(studentRepository.findBySearchableByFacultyTrue()).thenReturn(List.of(searchable));
+        when(opportunityRepository.findByFacultyId(3L)).thenReturn(null);
+
+        assertThat(facade.discoverCandidates(3L)).containsExactly(searchable);
+    }
+
+    @Test
+    void discoverCandidatesSkipsNullApplicationAndNullStudentId() {
+        when(facultyRepository.findById(3L)).thenReturn(Optional.of(new FacultyProfile()));
+        StudentProfile searchable = student();
+        when(studentRepository.findBySearchableByFacultyTrue()).thenReturn(List.of(searchable));
+
+        Opportunity op = new Opportunity(10L, 3L, "t", "d");
+        when(opportunityRepository.findByFacultyId(3L)).thenReturn(List.of(op));
+        when(applicationRepository.findByOpportunityId(10L)).thenReturn(java.util.Arrays.asList(
+                null,
+                new Application(1L, null, 10L),
+                new Application(2L, 7L, 10L)));
+
+        assertThat(facade.discoverCandidates(3L)).extracting(StudentProfile::getId).containsExactly(7L);
+    }
+
+    @Test
+    void discoverCandidatesFiltersUnappliedAndNullCandidatesInApplicantBranch() {
+        when(facultyRepository.findById(3L)).thenReturn(Optional.of(new FacultyProfile()));
+        StudentProfile noId = new StudentProfile();
+        noId.setSearchableByFaculty(true);
+        StudentProfile applied = student();
+        StudentProfile notApplied = new StudentProfile();
+        notApplied.setId(9L);
+        notApplied.setSearchableByFaculty(true);
+        when(studentRepository.findBySearchableByFacultyTrue())
+                .thenReturn(java.util.Arrays.asList(null, noId, applied, notApplied));
+
+        Opportunity op = new Opportunity(10L, 3L, "t", "d");
+        when(opportunityRepository.findByFacultyId(3L)).thenReturn(List.of(op));
+        when(applicationRepository.findByOpportunityId(10L)).thenReturn(List.of(new Application(1L, 7L, 10L)));
+
+        assertThat(facade.discoverCandidates(3L)).extracting(StudentProfile::getId).containsExactly(7L);
+    }
+
+    @Test
+    void discoverCandidatesFiltersOutNonSearchableAndNullsInFallback() {
+        when(facultyRepository.findById(3L)).thenReturn(Optional.of(new FacultyProfile()));
+        StudentProfile nonSearchable = Mockito.mock(StudentProfile.class);
+        when(nonSearchable.isSearchableByFaculty()).thenReturn(false);
+        when(nonSearchable.getId()).thenReturn(50L);
+        StudentProfile noId = new StudentProfile();
+        noId.setSearchableByFaculty(true);
+        StudentProfile valid = student();
+        when(studentRepository.findBySearchableByFacultyTrue())
+                .thenReturn(java.util.Arrays.asList(null, nonSearchable, noId, valid));
+        when(opportunityRepository.findByFacultyId(3L)).thenReturn(List.of());
+
+        assertThat(facade.discoverCandidates(3L)).containsExactly(valid);
+    }
+
+    @Test
+    void toEvidenceSkipsNullEntries() {
+        List<SkillEvidence> rows = facade.toEvidence(7L,
+                java.util.Arrays.asList(null, new ImportedEvidence("Java", "repo", "snip", 0.5)));
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).getSkillName()).isEqualTo("Java");
+    }
+
+    @Test
+    void importSkillsRejectsNullHandle() {
+        when(studentRepository.findById(7L)).thenReturn(Optional.of(student()));
+        assertThatThrownBy(() -> facade.importSkills(7L, "github", null))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining("handle");
+    }
+
+    @Test
+    void importSkillsRejectsWhitespaceSource() {
+        when(studentRepository.findById(7L)).thenReturn(Optional.of(student()));
+        assertThatThrownBy(() -> facade.importSkills(7L, "  ", "octocat"))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining("must not be blank");
+    }
+
+    @Test
+    void importSkillsRejectsEmptySource() {
+        when(studentRepository.findById(7L)).thenReturn(Optional.of(student()));
+        assertThatThrownBy(() -> facade.importSkills(7L, "", "octocat"))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining("must not be blank");
+    }
+
+    @Test
+    void saveStudentRejectsNullEmail() {
+        StudentProfile incoming = student();
+        incoming.setEmail(null);
+        assertThatThrownBy(() -> facade.saveStudent(incoming))
+                .isInstanceOf(InvalidRequestException.class)
+                .hasMessageContaining("mail");
+    }
+
+    @Test
+    void importSkillsSkipsNullSkillNames() {
+        ResearchDataAdapter adapter = Mockito.mock(ResearchDataAdapter.class);
+        when(adapter.platformName()).thenReturn("github");
+        when(adapter.importEvidence("octocat"))
+                .thenReturn(List.of(new ImportedEvidence("Java", "repo", "snip", 0.5)));
+        ResearchMatchFacade custom = new ResearchMatchFacade(studentRepository, facultyRepository,
+                opportunityRepository, applicationRepository, skillEvidenceRepository, matchingEngine,
+                recruitmentPipeline, new AdapterRegistry(List.of(adapter)));
+
+        when(studentRepository.findById(7L)).thenReturn(Optional.of(student()));
+        SkillEvidence nullSkill = new SkillEvidence(2L, 7L, null, "r", "s");
+        SkillEvidence java = new SkillEvidence(1L, 7L, "Java", "r", "s");
+        java.setVerifiedByStudent(true);
+        when(skillEvidenceRepository.saveAll(anyList())).thenReturn(List.of(nullSkill, java));
+        when(studentRepository.save(any(StudentProfile.class))).thenAnswer(i -> i.getArgument(0));
+
+        custom.importSkills(7L, "github", "octocat");
+
+        ArgumentCaptor<StudentProfile> captor = ArgumentCaptor.forClass(StudentProfile.class);
+        verify(studentRepository).save(captor.capture());
+        assertThat(captor.getValue().getVerifiedSkills()).containsOnly("Java").doesNotContainNull();
+    }
+
+    @Test
     void importSourcesAreDistinct() {
         assertThat(facade.importSources()).doesNotHaveDuplicates();
         assertThat(new HashSetSize(facade.importSources()).size()).isEqualTo(2);

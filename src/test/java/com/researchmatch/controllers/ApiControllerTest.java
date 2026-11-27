@@ -240,6 +240,22 @@ class ApiControllerTest {
     }
 
     @Test
+    void applyWithNullRequestDirectlyThrowsInvalidRequest() {
+        when(session.currentStudent()).thenReturn(student());
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> new ApiController(facade, session).apply(null))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
+    void createOpportunityWithNullRequestDirectlyThrowsInvalidRequest() {
+        when(session.currentFaculty()).thenReturn(faculty());
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> new ApiController(facade, session).createOpportunity(null))
+                .isInstanceOf(InvalidRequestException.class);
+    }
+
+    @Test
     void transitionIllegalStateIsBadRequest() throws Exception {
         when(facade.shortlist(2L)).thenThrow(new com.researchmatch.config.IllegalStateTransitionException("no"));
         mvc.perform(post("/api/applications/2/transition").param("action", "shortlist"))
@@ -290,6 +306,48 @@ class ApiControllerTest {
                         .content("null"))
                 .andExpect(status().isBadRequest());
         verify(facade, never()).saveOpportunity(any());
+    }
+
+    @Test
+    void applyWithExplicitNullOpportunityIdIsBadRequest() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        mvc.perform(post("/api/applications")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"opportunityId\":null,\"statement\":\"x\"}"))
+                .andExpect(status().isBadRequest());
+        verify(facade, never()).submitApplication(anyLong(), anyLong(), anyString());
+    }
+
+    @Test
+    void applyWithMalformedJsonBodyIsBadRequest() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        mvc.perform(post("/api/applications")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"opportunityId\":"))
+                .andExpect(status().isBadRequest());
+        verify(facade, never()).submitApplication(anyLong(), anyLong(), anyString());
+    }
+
+    @Test
+    void createOpportunityWithMalformedJsonBodyIsBadRequest() throws Exception {
+        when(session.currentFaculty()).thenReturn(faculty());
+        mvc.perform(post("/api/opportunities")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{"))
+                .andExpect(status().isBadRequest());
+        verify(facade, never()).saveOpportunity(any());
+    }
+
+    @Test
+    void matchWithNonNumericPathVariableIsBadRequest() throws Exception {
+        mvc.perform(get("/api/students/abc/matches/10"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void transitionWithNonNumericIdIsBadRequest() throws Exception {
+        mvc.perform(post("/api/applications/abc/transition").param("action", "shortlist"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
