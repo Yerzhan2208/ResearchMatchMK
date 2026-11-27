@@ -23,3 +23,4 @@ authoritative when they disagree.
 | Date | Area | Note | Status |
 | --- | --- | --- | --- |
 | 2026-11-25 | Member 5 / QA | [member5-qa-integration](2026-11-25-member5-qa-integration.md) | done |
+| 2026-11-27 | Member 2 / scoring | [scoring-normalization](2026-11-27-scoring-normalization.md) | done |
