@@ -1,13 +1,10 @@
 package com.researchmatch.matching;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 /**
  * Offline TF-IDF + cosine {@link SemanticSimilarity}. Fully deterministic, no external resources.
@@ -19,8 +16,6 @@ import java.util.regex.Pattern;
 public final class TfIdfSemanticSimilarity implements SemanticSimilarity {
 
     public static final String NAME = "tfidf";
-
-    private static final Pattern TOKEN_SPLIT = Pattern.compile("[^a-z0-9]+");
 
     @Override
     public String name() {
@@ -37,20 +32,9 @@ public final class TfIdfSemanticSimilarity implements SemanticSimilarity {
     // ---------------------------------------------------------------- tokenising
 
     List<String> tokenize(String text) {
-        List<String> tokens = new ArrayList<>();
-        if (text == null) {
-            return tokens;
-        }
-        String normalised = text.toLowerCase(Locale.ROOT).trim();
-        if (normalised.isEmpty()) {
-            return tokens;
-        }
-        for (String token : TOKEN_SPLIT.split(normalised)) {
-            if (!token.isEmpty()) {
-                tokens.add(token);
-            }
-        }
-        return tokens;
+        // Split on non-alphanumerics and expand known aliases (ml → machine learning, hci → …) so that
+        // abbreviation vs. full-phrase interests still overlap.
+        return SemanticSynonyms.expand(text);
     }
 
     // ---------------------------------------------------------------- TF-IDF + cosine

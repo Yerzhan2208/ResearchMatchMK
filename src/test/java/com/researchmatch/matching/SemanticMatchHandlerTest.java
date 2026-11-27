@@ -200,4 +200,44 @@ class SemanticMatchHandlerTest {
 
         assertThat(context.getTotalScore()).isEqualTo(semanticScore(context));
     }
+
+    // ---------------------------------------------------------------- structured skills & synonyms
+
+    @Test
+    void matchesWhenInterestAppearsOnlyInOpportunitySkills() {
+        // The prose never says "machine learning"; only the structured preferred skills do.
+        StudentProfile student = student(Set.of("Machine Learning"), Set.of("Python"), Set.of());
+        Opportunity opportunity = opportunity(
+                "Transformer Models for Cantonese Text",
+                "Adapt an open multilingual model to Cantonese.");
+        opportunity.setRequiredSkills(Set.of("Python", "PyTorch"));
+        opportunity.setPreferredSkills(Set.of("NLP", "Machine Learning"));
+
+        assertThat(semanticScore(evaluate(student, opportunity))).isGreaterThan(0.0);
+    }
+
+    @Test
+    void matchesCompoundInterestInPreferredSkills() {
+        StudentProfile student = student(Set.of("Human-Computer Interaction"), Set.of("Figma"), Set.of());
+        Opportunity opportunity = opportunity(
+                "Usability Study of Student Portals",
+                "Run moderated usability sessions on the student portal.");
+        opportunity.setRequiredSkills(Set.of("Figma"));
+        opportunity.setPreferredSkills(Set.of("Human-Computer Interaction"));
+
+        assertThat(semanticScore(evaluate(student, opportunity))).isGreaterThan(0.0);
+    }
+
+    @Test
+    void abbreviationInterestMatchesFullPhraseSkill() {
+        double withAlias = semanticScore(evaluate(
+                student(Set.of("ml"), Set.of(), Set.of()),
+                opportunity("Machine learning research", "Build machine learning models")));
+        double unrelated = semanticScore(evaluate(
+                student(Set.of("ml"), Set.of(), Set.of()),
+                opportunity("Coral reefs", "Marine biology fieldwork")));
+
+        assertThat(withAlias).isGreaterThan(0.0);
+        assertThat(withAlias).isGreaterThan(unrelated);
+    }
 }

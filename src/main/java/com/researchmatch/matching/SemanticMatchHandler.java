@@ -88,6 +88,10 @@ public class SemanticMatchHandler extends AbstractMatchLayerHandler {
         StringBuilder sb = new StringBuilder();
         appendText(sb, opportunity.getTitle());
         appendText(sb, opportunity.getDescription());
+        // Include the structured skill requirements so skill-name interests (e.g. "Machine Learning",
+        // "Human-Computer Interaction") overlap with the opportunity even when the prose never names them.
+        appendAll(sb, opportunity.getRequiredSkills());
+        appendAll(sb, opportunity.getPreferredSkills());
         return sb.toString();
     }
 
