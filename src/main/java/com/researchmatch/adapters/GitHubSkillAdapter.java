@@ -139,10 +139,6 @@ public class GitHubSkillAdapter implements ResearchDataAdapter {
                 .toList();
     }
 
-    private static double round(double value) {
-        return Math.round(Math.max(0.0, Math.min(1.0, value)) * 100.0) / 100.0;
-    }
-
     // ------------------------------------------------------------------ remote mode
 
     private List<ImportedEvidence> remoteEvidence(String username) {
@@ -206,7 +202,7 @@ public class GitHubSkillAdapter implements ResearchDataAdapter {
                 skill,
                 firstRepo.get(skill),
                 "Found in " + count + " of " + repoCount + " public repositories of " + username,
-                round((double) count / repoCount))));
+                ImportedEvidence.confidenceFrom((double) count / repoCount))));
         return evidence;
     }
 

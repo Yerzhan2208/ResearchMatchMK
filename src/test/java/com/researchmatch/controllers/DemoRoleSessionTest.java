@@ -15,6 +15,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -114,6 +115,39 @@ class DemoRoleSessionTest {
         Opportunity op = new Opportunity(1L, 4L, "t", "d");
         when(opportunityRepository.findAll()).thenReturn(List.of(op));
         when(facultyRepository.findById(4L)).thenReturn(Optional.empty());
+        assertThat(session.currentFaculty()).isNull();
+    }
+
+    @Test
+    void currentFacultyCachesResolvedId() {
+        FacultyProfile f = new FacultyProfile();
+        f.setId(3L);
+        when(facultyRepository.findAll()).thenReturn(List.of(f));
+        when(facultyRepository.findById(3L)).thenReturn(Optional.of(f));
+
+        assertThat(session.currentFaculty()).isSameAs(f);
+        assertThat(session.currentFaculty()).isSameAs(f);
+
+        verify(facultyRepository, times(1)).findAll();
+        verify(facultyRepository, times(2)).findById(3L);
+    }
+
+    @Test
+    void currentFacultyHandlesNullFacultyList() {
+        when(facultyRepository.findAll()).thenReturn(null);
+        Opportunity op = new Opportunity(1L, 4L, "t", "d");
+        when(opportunityRepository.findAll()).thenReturn(List.of(op));
+        FacultyProfile f = new FacultyProfile();
+        f.setId(4L);
+        when(facultyRepository.findById(4L)).thenReturn(Optional.of(f));
+
+        assertThat(session.currentFaculty()).isSameAs(f);
+    }
+
+    @Test
+    void currentFacultyHandlesNullOpportunityListWhenNoFaculty() {
+        when(facultyRepository.findAll()).thenReturn(List.of());
+        when(opportunityRepository.findAll()).thenReturn(null);
         assertThat(session.currentFaculty()).isNull();
     }
 }

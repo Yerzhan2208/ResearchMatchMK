@@ -105,8 +105,13 @@
                 </div>
 
                 <div class="shrink-0">
-                    <button type="button"
+                    <span th:if="${appliedOpportunityIds.contains(item.opportunity.id)}"
+                          class="inline-flex items-center rounded-lg bg-emerald-100 px-4 py-2 text-sm font-medium text-emerald-700"
+                          aria-label="Already applied">✓ Applied</span>
+                    <button th:unless="${appliedOpportunityIds.contains(item.opportunity.id)}"
+                            type="button"
                             class="apply-open rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            aria-label="Apply to this opportunity"
                             th:attr="data-opportunity-id=${item.opportunity.id},data-opportunity-title=${item.opportunity.title}">
                         Apply
                     </button>
@@ -127,13 +132,17 @@
             </tr>
             </thead>
             <tbody>
-            <tr th:each="app : ${applications}" class="border-b border-slate-50">
-                <td class="py-2" th:text="'#' + ${app.id}">#</td>
+            <tr th:each="av : ${applications}" class="border-b border-slate-50">
+                <td class="py-2">
+                    <span class="font-medium"
+                          th:text="${av.opportunityTitle} != null ? ${av.opportunityTitle} : ('#' + ${av.application.id})">Title</span>
+                    <span class="text-xs text-slate-400 ml-1" th:text="'#' + ${av.application.id}">#</span>
+                </td>
                 <td class="py-2">
                     <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
-                          th:text="${app.status}">NEW</span>
+                          th:text="${av.application.status}">NEW</span>
                 </td>
-                <td class="py-2 text-slate-500" th:text="${app.updatedAt} ?: '—'">—</td>
+                <td class="py-2 text-slate-500" th:text="${av.application.updatedAt} ?: '—'">—</td>
             </tr>
             </tbody>
         </table>
@@ -141,14 +150,14 @@
 </main>
 
 <!-- Application modal: only presentation toggling is client-side. -->
-<div id="applyModal" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4">
+<div id="applyModal" role="dialog" aria-modal="true" aria-labelledby="applyTitle" class="fixed inset-0 z-40 hidden items-center justify-center bg-slate-900/50 p-4">
     <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
         <div class="flex items-start justify-between">
             <div>
                 <h3 class="text-lg font-semibold">Apply</h3>
                 <p id="applyTitle" class="text-sm text-slate-500"></p>
             </div>
-            <button type="button" id="applyClose" class="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
+            <button type="button" id="applyClose" aria-label="Close" class="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
         </div>
         <form th:action="@{/apply}" method="post" class="mt-4 space-y-3">
             <input type="hidden" name="opportunityId" id="applyOpportunityId"/>
@@ -175,15 +184,20 @@
         var modal = document.getElementById('applyModal');
         var titleEl = document.getElementById('applyTitle');
         var idEl = document.getElementById('applyOpportunityId');
+        var statementEl = document.getElementById('statement');
+        var lastFocused = null;
         function open(btn) {
+            lastFocused = btn;
             idEl.value = btn.getAttribute('data-opportunity-id');
             titleEl.textContent = btn.getAttribute('data-opportunity-title') || '';
             modal.classList.remove('hidden');
             modal.classList.add('flex');
+            if (statementEl) { statementEl.focus(); }
         }
         function close() {
             modal.classList.add('hidden');
             modal.classList.remove('flex');
+            if (lastFocused && typeof lastFocused.focus === 'function') { lastFocused.focus(); }
         }
         document.querySelectorAll('.apply-open').forEach(function (btn) {
             btn.addEventListener('click', function () { open(btn); });
@@ -191,6 +205,9 @@
         document.getElementById('applyClose').addEventListener('click', close);
         document.getElementById('applyCancel').addEventListener('click', close);
         modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !modal.classList.contains('hidden')) { close(); }
+        });
     })();
 </script>
 </body>

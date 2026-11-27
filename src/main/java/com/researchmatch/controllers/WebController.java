@@ -125,7 +125,9 @@ public class WebController {
         }
         model.addAttribute("feed", feed);
         model.addAttribute("feedError", feedError);
-        model.addAttribute("applications", applicationsForCurrentStudent(student));
+        List<Application> apps = applicationsForCurrentStudent(student);
+        model.addAttribute("applications", applicationViews(apps));
+        model.addAttribute("appliedOpportunityIds", appliedOpportunityIds(apps));
         return "discover";
     }
 
@@ -246,7 +248,7 @@ public class WebController {
     // ---------------------------------------------------------------- professor dashboard
 
     @GetMapping("/professor")
-    public String professor(Model model) {
+    public String professor(@RequestParam(value = "q", required = false) String q, Model model) {
         commonAttributes(model);
         FacultyProfile faculty = session.currentFaculty();
         List<Opportunity> opportunities = faculty == null ? List.of() : facade.opportunitiesForFaculty(faculty.getId());
@@ -257,13 +259,14 @@ public class WebController {
         String candidateError = null;
         if (faculty != null) {
             try {
-                candidates = facade.discoverCandidates(faculty.getId());
+                candidates = filterCandidates(facade.discoverCandidates(faculty.getId()), q);
             } catch (ResearchMatchException e) {
                 candidateError = e.getMessage();
             }
         }
         model.addAttribute("candidates", candidates);
         model.addAttribute("candidateError", candidateError);
+        model.addAttribute("candidateQuery", q == null ? "" : q.trim());
         model.addAttribute("board", pipelineBoard(opportunities));
         return "professor";
     }
@@ -351,6 +354,65 @@ public class WebController {
             return List.of();
         }
         return facade.applicationsForStudent(student.getId());
+    }
+
+    private List<ApplicationView> applicationViews(List<Application> applications) {
+        List<ApplicationView> views = new ArrayList<>();
+        if (applications == null) {
+            return views;
+        }
+        for (Application app : applications) {
+            if (app == null) {
+                continue;
+            }
+            Opportunity op = safeOpportunity(app.getOpportunityId());
+            String title = (op != null && op.getTitle() != null && !op.getTitle().isBlank())
+                    ? op.getTitle() : null;
+            views.add(new ApplicationView(app, title));
+        }
+        return views;
+    }
+
+    private java.util.Set<Long> appliedOpportunityIds(List<Application> applications) {
+        java.util.Set<Long> ids = new java.util.LinkedHashSet<>();
+        if (applications != null) {
+            for (Application app : applications) {
+                if (app != null && app.getOpportunityId() != null) {
+                    ids.add(app.getOpportunityId());
+                }
+            }
+        }
+        return ids;
+    }
+
+    private static List<StudentProfile> filterCandidates(List<StudentProfile> candidates, String q) {
+        if (q == null || q.isBlank() || candidates == null) {
+            return candidates == null ? List.of() : candidates;
+        }
+        String needle = q.trim().toLowerCase();
+        List<StudentProfile> filtered = new ArrayList<>();
+        for (StudentProfile c : candidates) {
+            if (c == null) {
+                continue;
+            }
+            boolean nameMatch = c.getName() != null && c.getName().toLowerCase().contains(needle);
+            boolean skillMatch = hasSkillContaining(c, needle);
+            if (nameMatch || skillMatch) {
+                filtered.add(c);
+            }
+        }
+        return filtered;
+    }
+
+    private static boolean hasSkillContaining(StudentProfile c, String needle) {
+        if (c.getVerifiedSkills() != null) {
+            for (String sk : c.getVerifiedSkills()) {
+                if (sk != null && sk.toLowerCase().contains(needle)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

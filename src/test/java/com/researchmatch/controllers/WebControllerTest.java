@@ -18,6 +18,7 @@ import org.springframework.web.servlet.view.InternalResourceViewResolver;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -50,7 +51,10 @@ class WebControllerTest {
         InternalResourceViewResolver resolver = new InternalResourceViewResolver();
         resolver.setPrefix("/templates/");
         resolver.setSuffix(".html");
-        mvc = MockMvcBuilders.standaloneSetup(controller).setViewResolvers(resolver).build();
+        mvc = MockMvcBuilders.standaloneSetup(controller)
+                .setViewResolvers(resolver)
+                .setControllerAdvice(new MvcErrorAdvice())
+                .build();
     }
 
     private StudentProfile student() {
@@ -114,7 +118,7 @@ class WebControllerTest {
         MatchResult match = new MatchResult(1L, 7L, 10L);
         match.setTotalScore(0.8);
         match.setEligible(true);
-        when(facade.recommend(7L, "balanced")).thenReturn(List.of(match));
+        when(facade.recommend(eq(7L), any())).thenReturn(List.of(match));
         Opportunity op = new Opportunity(10L, 3L, "NLP", "desc");
         when(facade.getOpportunity(10L)).thenReturn(op);
         when(facade.applicationsForStudent(7L)).thenReturn(List.of());
@@ -130,7 +134,7 @@ class WebControllerTest {
     @Test
     void discoverFallsBackToBalancedForUnknownStrategy() throws Exception {
         when(session.currentStudent()).thenReturn(student());
-        when(facade.recommend(7L, "balanced")).thenReturn(List.of());
+        when(facade.recommend(7L, "nonsense")).thenReturn(List.of());
 
         mvc.perform(get("/discover").param("strategy", "nonsense"))
                 .andExpect(status().isOk())
@@ -172,7 +176,7 @@ class WebControllerTest {
     void discoverSkipsMatchWithNullOpportunityId() throws Exception {
         when(session.currentStudent()).thenReturn(student());
         MatchResult match = new MatchResult(1L, 7L, null);
-        when(facade.recommend(7L, "balanced")).thenReturn(List.of(match));
+        when(facade.recommend(eq(7L), any())).thenReturn(List.of(match));
 
         mvc.perform(get("/discover"))
                 .andExpect(status().isOk())
@@ -451,5 +455,301 @@ class WebControllerTest {
         when(facade.shortlist(2L)).thenThrow(new com.researchmatch.config.IllegalStateTransitionException("no"));
         mvc.perform(post("/applications/2/transition").param("action", "shortlist"))
                 .andExpect(flash().attribute("errorMessage", "no"));
+    }
+
+    @Test
+    void switchRoleToleratesNullRoleDirectly() {
+        WebController controller = new WebController(facade, session, applicationRepository);
+        org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap attrs =
+                new org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap();
+        String view = controller.switchRole(null, attrs);
+        assertThat(view).isEqualTo("redirect:/");
+        assertThat(attrs.getFlashAttributes()).containsKey("errorMessage");
+        org.mockito.Mockito.verify(session, never()).setRole(any());
+    }
+
+    @Test
+    void discoverAddsFeedEntryWhenOpportunityExists() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        MatchResult match = new MatchResult(1L, 7L, 10L);
+        when(facade.recommend(eq(7L), any())).thenReturn(List.of(match));
+        when(facade.getOpportunity(10L)).thenReturn(new Opportunity(10L, 3L, "NLP", "d"));
+        when(facade.applicationsForStudent(7L)).thenReturn(List.of());
+
+        org.springframework.test.web.servlet.MvcResult result = mvc.perform(get("/discover"))
+                .andExpect(status().isOk())
+                .andReturn();
+        @SuppressWarnings("unchecked")
+        List<OpportunityMatchView> feed =
+                (List<OpportunityMatchView>) result.getModelAndView().getModel().get("feed");
+        assertThat(feed).hasSize(1);
+    }
+
+    @Test
+    void discoverSurfacesResearchMatchExceptionFromRecommend() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.recommend(anyLong(), any())).thenThrow(new InvalidRequestException("bad strategy"));
+
+        mvc.perform(get("/discover"))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("feedError", "bad strategy"));
+    }
+
+    @Test
+    void transitionToleratesNullActionDirectly() {
+        WebController controller = new WebController(facade, session, applicationRepository);
+        org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap attrs =
+                new org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap();
+        String view = controller.transitionApplication(1L, null, attrs);
+        assertThat(view).isEqualTo("redirect:/professor");
+        assertThat(attrs.getFlashAttributes()).containsKey("errorMessage");
+        org.mockito.Mockito.verify(facade, never()).shortlist(any());
+    }
+
+    @Test
+    void discoverTreatsBlankStrategyAsBalanced() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.recommend(anyLong(), any())).thenReturn(List.of());
+
+        mvc.perform(get("/discover").param("strategy", "   "))
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("strategy", "balanced"));
+    }
+
+    @Test
+    void professorHandlesNullOpportunitiesList() throws Exception {
+        when(session.currentFaculty()).thenReturn(faculty());
+        when(facade.opportunitiesForFaculty(3L)).thenReturn(null);
+        when(facade.discoverCandidates(3L)).thenReturn(List.of());
+
+        mvc.perform(get("/professor"))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeExists("board"));
+    }
+
+    @Test
+    void professorBoardSkipsNullAndIdlessOpportunities() throws Exception {
+        when(session.currentFaculty()).thenReturn(faculty());
+        Opportunity valid = new Opportunity(10L, 3L, "NLP", "d");
+        Opportunity noId = new Opportunity();
+        when(facade.opportunitiesForFaculty(3L)).thenReturn(java.util.Arrays.asList(null, noId, valid));
+        when(facade.discoverCandidates(3L)).thenReturn(List.of());
+        when(applicationRepository.findByOpportunityId(10L)).thenReturn(List.of());
+
+        mvc.perform(get("/professor")).andExpect(status().isOk());
+    }
+
+    @Test
+    void professorBoardSkipsApplicationWithNullStatus() throws Exception {
+        when(session.currentFaculty()).thenReturn(faculty());
+        Opportunity op = new Opportunity(10L, 3L, "NLP", "d");
+        when(facade.opportunitiesForFaculty(3L)).thenReturn(List.of(op));
+        when(facade.discoverCandidates(3L)).thenReturn(List.of());
+        Application nullStatus = new Application(1L, 7L, 10L);
+        nullStatus.setStatus(null);
+        Application valid = new Application(2L, 8L, 10L);
+        valid.setStatus(Application.Status.NEW);
+        when(applicationRepository.findByOpportunityId(10L))
+                .thenReturn(java.util.Arrays.asList(nullStatus, valid));
+
+        mvc.perform(get("/professor"))
+                .andExpect(status().isOk())
+                .andExpect(model().attributeExists("board"));
+    }
+
+    @Test
+    void splitCsvDropsBlankAndEmptyTokensViaProfile() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        mvc.perform(post("/profile")
+                        .param("name", "Ada")
+                        .param("email", "ada@example.com")
+                        .param("interests", "   ")
+                        .param("claimedSkills", "Java, ,Python"))
+                .andExpect(redirectedUrl("/profile"));
+
+        org.mockito.ArgumentCaptor<StudentProfile> captor =
+                org.mockito.ArgumentCaptor.forClass(StudentProfile.class);
+        verify(facade).saveStudent(captor.capture());
+        StudentProfile saved = captor.getValue();
+        assertThat(saved.getInterests()).isEmpty();
+        assertThat(saved.getClaimedSkills()).containsExactly("Java", "Python");
+    }
+
+    @Test
+    void saveProfileDuplicateEmailFlashesError() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.saveStudent(any())).thenThrow(new DuplicateEntityException("dup"));
+
+        mvc.perform(post("/profile").param("name", "Ada").param("email", "ada@example.com"))
+                .andExpect(redirectedUrl("/profile"))
+                .andExpect(flash().attribute("errorMessage", "dup"));
+    }
+
+    @Test
+    void transitionWithNonNumericIdIsClientError() throws Exception {
+        mvc.perform(post("/applications/abc/transition").param("action", "shortlist"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ---------------------------------------------------------------- error advice
+
+    @Test
+    void profileSurfacesUnexpectedFacadeFailureAs500() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.evidenceFor(7L)).thenThrow(new RuntimeException("boom"));
+
+        mvc.perform(get("/profile"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(view().name("error"))
+                .andExpect(model().attribute("status", 500))
+                .andExpect(model().attribute("message", "An unexpected error occurred."));
+    }
+
+    @Test
+    void discoverSurfacesApplicationsLookupFailureAs500() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.recommend(eq(7L), any())).thenReturn(List.of());
+        when(facade.applicationsForStudent(7L)).thenThrow(new RuntimeException("db down"));
+
+        mvc.perform(get("/discover"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(view().name("error"));
+    }
+
+    @Test
+    void professorSurfacesOpportunitiesLookupFailureAs500() throws Exception {
+        when(session.currentFaculty()).thenReturn(faculty());
+        when(facade.opportunitiesForFaculty(3L)).thenThrow(new RuntimeException("boom"));
+
+        mvc.perform(get("/professor"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(view().name("error"));
+    }
+
+    @Test
+    void profileDomainExceptionRenders404() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.evidenceFor(7L)).thenReturn(List.of());
+        when(facade.importSources()).thenThrow(new ResourceNotFoundException("nope"));
+
+        mvc.perform(get("/profile"))
+                .andExpect(status().isNotFound())
+                .andExpect(view().name("error"))
+                .andExpect(model().attribute("status", 404))
+                .andExpect(model().attribute("message", "nope"));
+    }
+
+    @Test
+    void profileInvalidRequestRenders400() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.evidenceFor(7L)).thenReturn(List.of());
+        when(facade.importSources()).thenThrow(new InvalidRequestException("bad"));
+
+        mvc.perform(get("/profile"))
+                .andExpect(status().isBadRequest())
+                .andExpect(view().name("error"))
+                .andExpect(model().attribute("message", "bad"));
+    }
+
+    // ---------------------------------------------------------------- stage 4: UI polish
+
+    private Application appForOpp10() {
+        Application a = new Application(1L, 7L, 10L);
+        a.setStatus(Application.Status.NEW);
+        return a;
+    }
+
+    @Test
+    void discoverExposesAppliedOpportunityIds() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.recommend(anyLong(), any())).thenReturn(List.of());
+        when(facade.applicationsForStudent(7L)).thenReturn(List.of(appForOpp10()));
+        when(facade.getOpportunity(10L)).thenReturn(new Opportunity(10L, 3L, "NLP", "d"));
+
+        org.springframework.test.web.servlet.MvcResult result = mvc.perform(get("/discover"))
+                .andExpect(status().isOk())
+                .andReturn();
+        @SuppressWarnings("unchecked")
+        java.util.Set<Long> ids =
+                (java.util.Set<Long>) result.getModelAndView().getModel().get("appliedOpportunityIds");
+        assertThat(ids).contains(10L);
+        assertThat(result.getModelAndView().getModel().get("applications")).isNotNull();
+    }
+
+    @Test
+    void discoverApplicationViewsPairTitle() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.recommend(anyLong(), any())).thenReturn(List.of());
+        when(facade.applicationsForStudent(7L)).thenReturn(List.of(appForOpp10()));
+        when(facade.getOpportunity(10L)).thenReturn(new Opportunity(10L, 3L, "NLP", "d"));
+
+        org.springframework.test.web.servlet.MvcResult result = mvc.perform(get("/discover"))
+                .andExpect(status().isOk())
+                .andReturn();
+        @SuppressWarnings("unchecked")
+        List<ApplicationView> views =
+                (List<ApplicationView>) result.getModelAndView().getModel().get("applications");
+        assertThat(views).hasSize(1);
+        assertThat(views.get(0).opportunityTitle()).isEqualTo("NLP");
+    }
+
+    @Test
+    void discoverApplicationViewsFallbackTitleNull() throws Exception {
+        when(session.currentStudent()).thenReturn(student());
+        when(facade.recommend(anyLong(), any())).thenReturn(List.of());
+        when(facade.applicationsForStudent(7L)).thenReturn(List.of(appForOpp10()));
+        when(facade.getOpportunity(10L)).thenThrow(new ResourceNotFoundException("gone"));
+
+        org.springframework.test.web.servlet.MvcResult result = mvc.perform(get("/discover"))
+                .andExpect(status().isOk())
+                .andReturn();
+        @SuppressWarnings("unchecked")
+        List<ApplicationView> views =
+                (List<ApplicationView>) result.getModelAndView().getModel().get("applications");
+        assertThat(views).hasSize(1);
+        assertThat(views.get(0).opportunityTitle()).isNull();
+    }
+
+    @Test
+    void professorFilterParamNarrowsCandidates() throws Exception {
+        StudentProfile ada = student();
+        StudentProfile bob = new StudentProfile();
+        bob.setId(8L);
+        bob.setName("Bob");
+        bob.setClaimedSkills(java.util.Set.of("Rust"));
+        when(session.currentFaculty()).thenReturn(faculty());
+        when(facade.opportunitiesForFaculty(3L)).thenReturn(List.of());
+        when(facade.discoverCandidates(3L)).thenReturn(List.of(ada, bob));
+
+        org.springframework.test.web.servlet.MvcResult result =
+                mvc.perform(get("/professor").param("q", "ada"))
+                        .andExpect(status().isOk())
+                        .andReturn();
+        @SuppressWarnings("unchecked")
+        List<StudentProfile> candidates =
+                (List<StudentProfile>) result.getModelAndView().getModel().get("candidates");
+        assertThat(candidates).hasSize(1);
+        assertThat(candidates.get(0).getName()).isEqualTo("Ada");
+        assertThat(result.getModelAndView().getModel().get("candidateQuery")).isEqualTo("ada");
+    }
+
+    @Test
+    void professorBlankQueryReturnsAllCandidates() throws Exception {
+        StudentProfile ada = student();
+        StudentProfile bob = new StudentProfile();
+        bob.setId(8L);
+        bob.setName("Bob");
+        when(session.currentFaculty()).thenReturn(faculty());
+        when(facade.opportunitiesForFaculty(3L)).thenReturn(List.of());
+        when(facade.discoverCandidates(3L)).thenReturn(List.of(ada, bob));
+
+        org.springframework.test.web.servlet.MvcResult result = mvc.perform(get("/professor"))
+                .andExpect(status().isOk())
+                .andReturn();
+        @SuppressWarnings("unchecked")
+        List<StudentProfile> candidates =
+                (List<StudentProfile>) result.getModelAndView().getModel().get("candidates");
+        assertThat(candidates).hasSize(2);
+        assertThat(result.getModelAndView().getModel().get("candidateQuery")).isEqualTo("");
     }
 }
